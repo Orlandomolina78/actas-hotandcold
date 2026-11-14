@@ -1,0 +1,203 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Código Apps Script</title>
+<style>body{font-family:sans-serif;font-size:20px;margin:16px}button{font-size:24px;padding:16px 24px;width:100%;background:#0a7;color:#fff;border:0;border-radius:10px}pre{font-size:12px;background:#f3f3f3;padding:8px;overflow:auto;max-height:50vh}#ok{color:#0a7;font-weight:bold}</style></head><body>
+<h2>Código para Google Apps Script</h2><p>Toca el botón, luego pega en el editor de Apps Script.</p>
+<button onclick="navigator.clipboard.writeText(document.getElementById('c').textContent).then(()=>document.getElementById('ok').textContent='✔ Copiado')">COPIAR CÓDIGO</button><p id="ok"></p>
+<pre id="c">/**
+ * Hot and Cold · Actas — envío de correo desde Gmail de la empresa.
+ *
+ * Este script se despliega como &quot;aplicación web&quot; en la cuenta
+ * hycsystem176746@gmail.com. La app del celular le manda el PDF y el script
+ * lo envía siempre a esa misma cuenta, más el segundo destinatario (el cliente).
+ *
+ * Cómo publicarlo: vea DEPLOY_APPS_SCRIPT.md (pasos en español).
+ *
+ * Propiedades del script (Archivo / Configuración del proyecto / Propiedades):
+ *   TOKEN  = el mismo secreto que se pega en Ajustes de la app (mín. 24 caracteres)
+ *
+ * La app llama con POST y Content-Type text/plain (JSON en el cuerpo),
+ * para evitar el &quot;preflight&quot; CORS que Apps Script no atiende bien.
+ * Respuesta JSON: {ok:true, id:&quot;ENT-2026-001&quot;, to:[...]} o {ok:false, error:&quot;...&quot;}.
+ * Si el mismo acta_id llega otra vez (reintento de la cola), no se vuelve a enviar.
+ */
+var COMPANY_EMAIL = &#x27;hycsystem176746@gmail.com&#x27;;
+var COMPANY_NAME  = &#x27;HOT ANDA COLD SYSTEM SAS&#x27;;
+var BRAND         = &#x27;Hot and Cold&#x27;;
+var MAX_PDF_BYTES = 15 * 1024 * 1024;
+var SENT_KEY      = &#x27;SENT_IDS&#x27;;
+var SENT_MAX      = 400;
+
+function doGet() {
+  return json_({
+    ok: true,
+    service: &#x27;actas-hotandcold&#x27;,
+    hint: &#x27;Use POST (text/plain) para enviar un acta o para ping.&#x27;
+  });
+}
+
+function doPost(e) {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+  } catch (err) {
+    return json_({ ok: false, error: &#x27;El script está ocupado. Se reintentará.&#x27; });
+  }
+  try {
+    return handlePost_(e);
+  } catch (err) {
+    return json_({ ok: false, error: String(err &amp;&amp; err.message ? err.message : err) });
+  } finally {
+    try { lock.releaseLock(); } catch (e2) {}
+  }
+}
+
+function handlePost_(e) {
+  var raw = (e &amp;&amp; e.postData &amp;&amp; e.postData.contents) ? e.postData.contents : &#x27;&#x27;;
+  var data;
+  try {
+    data = JSON.parse(raw);
+  } catch (err) {
+    return json_({ ok: false, error: &#x27;JSON inválido&#x27; });
+  }
+  if (!data || typeof data !== &#x27;object&#x27;) {
+    return json_({ ok: false, error: &#x27;JSON inválido&#x27; });
+  }
+
+  var props = PropertiesService.getScriptProperties();
+  var expected = String(props.getProperty(&#x27;TOKEN&#x27;) || &#x27;&#x27;);
+  if (!expected || expected.length &lt; 24 || expected === &#x27;CAMBIE-ESTE-TOKEN&#x27;) {
+    return json_({ ok: false, error: &#x27;Token del script no configurado&#x27; });
+  }
+  if (String(data.token || &#x27;&#x27;) !== expected) {
+    Utilities.sleep(400);
+    return json_({ ok: false, error: &#x27;Token inválido&#x27; });
+  }
+
+  if (data.ping === 1 || data.ping === &#x27;1&#x27; || data.ping === true) {
+    return json_({ ok: true, service: &#x27;actas-hotandcold&#x27; });
+  }
+
+  var actaId = String(data.acta_id || &#x27;&#x27;).trim();
+  if (!/^(RET|REC|ENT)-\d{4}-\d{3,6}$/.test(actaId)) {
+    return json_({ ok: false, error: &#x27;Consecutivo inválido&#x27; });
+  }
+
+  var sent = readSent_(props);
+  if (sent.indexOf(actaId) !== -1) {
+    return json_({ ok: true, id: actaId, duplicate: true, to: [COMPANY_EMAIL] });
+  }
+
+  var pdfBytes;
+  try {
+    var b64 = String(data.pdf_base64 || &#x27;&#x27;).replace(/\s/g, &#x27;&#x27;);
+    var comma = b64.indexOf(&#x27;,&#x27;);
+    if (b64.indexOf(&#x27;base64&#x27;) !== -1 &amp;&amp; comma !== -1) b64 = b64.slice(comma + 1);
+    if (!b64) return json_({ ok: false, error: &#x27;No llegó el PDF&#x27; });
+    pdfBytes = Utilities.base64Decode(b64);
+  } catch (err) {
+    return json_({ ok: false, error: &#x27;PDF inválido (base64)&#x27; });
+  }
+  if (!pdfBytes || pdfBytes.length &lt; 8) {
+    return json_({ ok: false, error: &#x27;No llegó el PDF&#x27; });
+  }
+  if (pdfBytes.length &gt; MAX_PDF_BYTES) {
+    return json_({ ok: false, error: &#x27;El PDF supera el tamaño permitido (15 MB)&#x27; });
+  }
+  if (!(pdfBytes[0] == 37 &amp;&amp; pdfBytes[1] == 80 &amp;&amp; pdfBytes[2] == 68 &amp;&amp; pdfBytes[3] == 70 &amp;&amp; pdfBytes[4] == 45)) {
+    return json_({ ok: false, error: &#x27;El archivo no es un PDF&#x27; });
+  }
+
+  var tipoRaw = String(data.tipo || &#x27;&#x27;).toLowerCase();
+  var tipo = (tipoRaw === &#x27;retiro&#x27; || tipoRaw === &#x27;recepcion&#x27; || tipoRaw === &#x27;recepción&#x27;) ? &#x27;retiro&#x27; : &#x27;entrega&#x27;;
+  var toExtra = normalizeEmail_(data.to_extra);
+  var ccList = parseEmailList_(data.cc);
+  var to = [COMPANY_EMAIL];
+  if (toExtra &amp;&amp; toExtra !== COMPANY_EMAIL.toLowerCase()) {
+    to.push(toExtra);
+  }
+
+  var filename = sanitizeFilename_(data.filename || (actaId + &#x27;.pdf&#x27;));
+  var subject = String(data.subject || defaultSubject_(tipo, actaId)).slice(0, 200);
+  var body = String(data.body || &#x27;&#x27;).slice(0, 8000);
+  if (!body) body = defaultSubject_(tipo, actaId) + &#x27;\n\nAdjuntamos el acta firmada en sitio.\n\n&#x27; + COMPANY_NAME;
+
+  var blob = Utilities.newBlob(pdfBytes, &#x27;application/pdf&#x27;, filename);
+
+  try {
+    GmailApp.sendEmail(to.join(&#x27;,&#x27;), subject, body, {
+      htmlBody: textToHtml_(body),
+      attachments: [blob],
+      name: BRAND + &#x27; · Actas&#x27;,
+      cc: ccList.join(&#x27;,&#x27;),
+      replyTo: COMPANY_EMAIL
+    });
+  } catch (err) {
+    return json_({ ok: false, error: &#x27;No se pudo enviar el correo. Se reintentará.&#x27; });
+  }
+
+  sent.push(actaId);
+  if (sent.length &gt; SENT_MAX) sent = sent.slice(-SENT_MAX);
+  props.setProperty(SENT_KEY, JSON.stringify(sent));
+
+  return json_({ ok: true, id: actaId, to: to });
+}
+
+function readSent_(props) {
+  try {
+    var raw = props.getProperty(SENT_KEY) || &#x27;[]&#x27;;
+    var arr = JSON.parse(raw);
+    return (arr &amp;&amp; arr.length) ? arr.slice() : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+function normalizeEmail_(v) {
+  var e = String(v || &#x27;&#x27;).trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e)) return &#x27;&#x27;;
+  return e;
+}
+
+function parseEmailList_(v) {
+  if (!v) return [];
+  var parts = Array.isArray(v) ? v : String(v).split(/[,;]+/);
+  var out = [];
+  for (var i = 0; i &lt; parts.length; i++) {
+    var e = normalizeEmail_(parts[i]);
+    if (e &amp;&amp; e !== COMPANY_EMAIL.toLowerCase() &amp;&amp; out.indexOf(e) === -1) out.push(e);
+  }
+  return out;
+}
+
+function sanitizeFilename_(name) {
+  var n = String(name || &#x27;acta.pdf&#x27;).replace(/[^A-Za-z0-9._-]+/g, &#x27;_&#x27;);
+  if (!/\.pdf$/i.test(n)) n += &#x27;.pdf&#x27;;
+  return n.slice(0, 120);
+}
+
+function defaultSubject_(tipo, id) {
+  var t = tipo === &#x27;retiro&#x27; ? &#x27;Acta de recepción&#x27; : &#x27;Acta de entrega&#x27;;
+  return t + &#x27; &#x27; + id + &#x27; · &#x27; + BRAND;
+}
+
+function textToHtml_(text) {
+  var esc = String(text)
+    .replace(/&amp;/g, &#x27;&amp;amp;&#x27;)
+    .replace(/&lt;/g, &#x27;&amp;lt;&#x27;)
+    .replace(/&gt;/g, &#x27;&amp;gt;&#x27;)
+    .replace(/&quot;/g, &#x27;&amp;quot;&#x27;);
+  var body = esc.replace(/\n/g, &#x27;&lt;br&gt;&#x27;);
+  return &#x27;&lt;div style=&quot;font-family:Arial,Helvetica,sans-serif;color:#1c2430;max-width:640px;font-size:14px;line-height:1.45&quot;&gt;&#x27;
+    + &#x27;&lt;div style=&quot;background:#1B365D;color:#fff;padding:14px 18px;border-bottom:4px solid #0C6B6B&quot;&gt;&#x27;
+    + &#x27;&lt;b style=&quot;font-size:18px&quot;&gt;&#x27; + COMPANY_NAME + &#x27;&lt;/b&gt;&lt;br&gt;&#x27;
+    + &#x27;&lt;span style=&quot;font-size:13px&quot;&gt;&#x27; + BRAND + &#x27; · Acta de equipos&lt;/span&gt;&lt;/div&gt;&#x27;
+    + &#x27;&lt;div style=&quot;padding:16px 4px&quot;&gt;&#x27; + body + &#x27;&lt;/div&gt;&#x27;
+    + &#x27;&lt;p style=&quot;font-size:13px;color:#555&quot;&gt;&#x27; + COMPANY_NAME + &#x27; · NIT 901.694.443-5 · 311 866 1394 · &#x27; + COMPANY_EMAIL + &#x27;&lt;/p&gt;&#x27;
+    + &#x27;&lt;/div&gt;&#x27;;
+}
+
+function json_(obj) {
+  return ContentService
+    .createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+</pre></body></html>
