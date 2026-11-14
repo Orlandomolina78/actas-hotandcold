@@ -1,0 +1,16 @@
+# Actas Hot and Cold — static PWA
+Options -Indexes
+# Forzar HTTPS (cámara, compartir y PWA lo exigen)
+RewriteEngine On
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+AddType application/manifest+json .webmanifest
+<IfModule mod_headers.c>
+  <FilesMatch "^(sw\.js|index\.html|manifest\.webmanifest)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set Referrer-Policy "same-origin"
+</IfModule>
+# No publicar carpetas de prueba
+RedirectMatch 404 ^.*/(test|sample|screens)/.*$

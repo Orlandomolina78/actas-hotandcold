@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1B365D">
+<meta name="description" content="Actas de recepción y entrega de equipos · HOT ANDA COLD SYSTEM SAS">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon-64.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Actas H&amp;C">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Actas · Hot and Cold</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<header class="topbar">
+  <button id="btnBack" class="tb-back" type="button" aria-label="Volver" hidden>&#8249;</button>
+  <img src="assets/logo-ui.png" class="tb-logo" alt="Hot and Cold">
+  <div class="tb-title"><strong id="tbTitle">Actas de equipos</strong><span id="tbSub">HOT ANDA COLD SYSTEM SAS</span></div>
+  <span id="netBadge" class="net" title="Estado de conexión"></span>
+</header>
+
+<main id="main">
+  <!-- INICIO -->
+  <section id="view-home" class="view">
+    <div class="hero">
+      <img src="assets/logo-ui.png" alt="Logo Hot and Cold" class="hero-logo">
+      <div>
+        <h1 id="homeEmpresa">HOT ANDA COLD SYSTEM SAS</h1>
+        <p class="muted" id="homeNit">NIT 901.694.443-5 · Marca Hot and Cold</p>
+      </div>
+    </div>
+    <button class="big-choice retiro" data-new="retiro" type="button">
+      <span class="bc-k">Nueva</span><span class="bc-t">Acta de RECEPCIÓN</span>
+      <span class="bc-n" id="nextRetLbl">REC-2026-001</span>
+      <span class="bc-d">Recibir equipo del cliente (queda en custodia)</span>
+    </button>
+    <button class="big-choice entrega" data-new="entrega" type="button">
+      <span class="bc-k">Nueva</span><span class="bc-t">Acta de ENTREGA</span>
+      <span class="bc-n" id="nextEntLbl">ENT-2026-001</span>
+      <span class="bc-d">Devolver equipo reparado o intervenido</span>
+    </button>
+    <div id="outboxCard" class="card outbox"></div>
+    <div class="row2">
+      <button class="btn ghost" data-go="history" type="button">&#128209; Historial</button>
+      <button class="btn ghost" data-go="settings" type="button">&#9881;&#65039; Ajustes</button>
+    </div>
+    <p class="note">&#128241; Las actas y el historial se guardan <b>solo en este celular</b>. Funciona sin señal: el PDF se genera siempre y el correo sale solo cuando vuelva la conexión.</p>
+  </section>
+
+  <!-- FORMULARIO -->
+  <section id="view-form" class="view" hidden>
+    <form id="actaForm" novalidate autocomplete="off">
+      <div class="form-head" id="formHead">
+        <div><span class="fh-k" id="fhKind">ACTA DE ENTREGA DE EQUIPOS</span>
+        <span class="fh-n">Consecutivo <b id="fhNum">ENT-2026-001</b></span></div>
+        <span class="fh-d" id="fhDate"></span>
+      </div>
+
+      <fieldset class="card">
+        <legend><span class="sec">1</span> Datos del cliente y del sitio</legend>
+        <label>Cliente<input name="cliente" list="clientesList" required placeholder="Nombre del cliente"></label>
+        <datalist id="clientesList"></datalist>
+        <div class="grid2">
+          <label>NIT<input name="nit" inputmode="numeric" placeholder="NIT del cliente"></label>
+          <label>OC / REQ / Pedido No.<input name="oc" placeholder="PED… / REQ…"></label>
+        </div>
+        <div class="dest-box" id="destBox">
+          <div class="fld">
+            <span class="lbl">Copia de la empresa <small>(siempre se envía, no se puede quitar)</small></span>
+            <div id="correoEmpresaFijo" class="locked-email">hycsystem176746@gmail.com</div>
+          </div>
+          <label>Correo del cliente <small>(se puede cambiar en esta acta)</small><input name="correoCliente" type="email" inputmode="email" placeholder="correo@cliente.com" id="correoCliente"></label>
+        </div>
+        <label>Albarán / remisión No.<input name="albaran"></label>
+        <label><span id="dirLabel">Dirección de entrega</span><input name="direccion" placeholder="Dirección del sitio"></label>
+        <div class="grid2">
+          <label>Sede / tienda / área<input name="sede"></label>
+          <label>Ciudad<input name="ciudad"></label>
+        </div>
+        <label>Contacto en sitio<input name="contacto"></label>
+        <div class="grid2">
+          <label>Teléfono<input name="telefono" type="tel" inputmode="tel"></label>
+          <label>Cargo del contacto<input name="cargoContacto"></label>
+        </div>
+        <div class="fld">
+          <span class="lbl">Tipo de servicio</span>
+          <div class="chips" id="tipoServicio"></div>
+          <input name="tipoOtro" placeholder="¿Cuál? (si marcó Otro)" class="mt">
+        </div>
+      </fieldset>
+
+      <fieldset class="card">
+        <legend><span class="sec">2</span> Equipos <small id="itemsCount"></small></legend>
+        <div id="items"></div>
+        <button type="button" class="btn add" id="btnAddItem">+ Agregar equipo</button>
+      </fieldset>
+
+      <fieldset class="card">
+        <legend><span class="sec">3</span> Registro fotográfico</legend>
+        <div class="row2">
+          <label class="btn photo">&#128247; Tomar foto<input type="file" accept="image/*" capture="environment" id="inCamera" hidden></label>
+          <label class="btn photo ghost">&#128444;&#65039; Galería<input type="file" accept="image/*" multiple id="inGallery" hidden></label>
+        </div>
+        <div id="photos" class="photos"></div>
+      </fieldset>
+
+      <fieldset class="card">
+        <legend><span class="sec">4</span> Firmas</legend>
+        <div class="sigblock" id="sigTecBlock">
+          <h3 id="sigTecTitle">Quien entrega · Técnico Hot and Cold</h3>
+          <div class="sigwrap"><canvas id="sigTec" aria-label="Firma del técnico"></canvas><span class="sighint">Firme aquí con el dedo</span></div>
+          <button type="button" class="btn small ghost" data-clear="sigTec">Borrar firma</button>
+          <label>Nombre de quien firma<input name="tecNombre" required placeholder="Nombre y apellido"></label>
+          <div class="grid2">
+            <label>Cédula<input name="tecCedula" inputmode="numeric"></label>
+            <label>Cargo<input name="tecCargo"></label>
+          </div>
+        </div>
+        <div class="sigblock" id="sigCliBlock">
+          <h3 id="sigCliTitle">Quien recibe · Cliente</h3>
+          <div class="sigwrap"><canvas id="sigCli" aria-label="Firma del cliente"></canvas><span class="sighint">Firme aquí con el dedo</span></div>
+          <button type="button" class="btn small ghost" data-clear="sigCli">Borrar firma</button>
+          <label>Nombre de quien firma<input name="cliNombre" required placeholder="Nombre y apellido"></label>
+          <div class="grid2">
+            <label>Cédula<input name="cliCedula" inputmode="numeric"></label>
+            <label>Cargo<input name="cliCargo"></label>
+          </div>
+        </div>
+      </fieldset>
+      <div id="formErrors" class="errors" hidden></div>
+      <div class="spacer"></div>
+    </form>
+    <div class="actionbar">
+      <button type="button" class="btn ghost small" id="btnDiscard">Limpiar</button>
+      <button type="button" class="btn primary" id="btnGenerate">Generar y enviar</button>
+    </div>
+  </section>
+
+  <!-- HISTORIAL -->
+  <section id="view-history" class="view" hidden>
+    <div class="row2">
+      <button class="btn" id="btnSendNow" type="button">&#8635; Enviar pendientes</button>
+      <button class="btn ghost" id="btnCsv" type="button">&#11015; Exportar CSV</button>
+    </div>
+    <p class="note">El historial vive solo en este celular. Exporte el CSV de vez en cuando y conserve los PDF que llegan al correo de la empresa.</p>
+    <div id="historyList"></div>
+  </section>
+
+  <!-- AJUSTES -->
+  <section id="view-settings" class="view" hidden>
+    <form id="settingsForm" novalidate autocomplete="off">
+      <fieldset class="card">
+        <legend>Empresa</legend>
+        <label>Razón social<input name="empresa.nombre"></label>
+        <div class="grid2">
+          <label>Marca<input name="empresa.marca"></label>
+          <label>NIT<input name="empresa.nit"></label>
+        </div>
+        <div class="grid2">
+          <label>Dirección<input name="empresa.direccion"></label>
+          <label>Ciudad<input name="empresa.ciudad"></label>
+        </div>
+        <div class="grid2">
+          <label>Teléfono 1<input name="empresa.tel1" type="tel"></label>
+          <label>Teléfono 2<input name="empresa.tel2" type="tel"></label>
+        </div>
+        <label>Correo de la empresa <small>(recibe todas las actas; no se puede quitar)</small><input name="empresa.email" type="email" readonly class="locked-input" id="empresaEmail"></label>
+      </fieldset>
+      <fieldset class="card">
+        <legend>Técnico predeterminado</legend>
+        <label>Nombre<input name="tecnico.nombre"></label>
+        <div class="grid2">
+          <label>Cédula<input name="tecnico.cedula" inputmode="numeric"></label>
+          <label>Cargo<input name="tecnico.cargo"></label>
+        </div>
+      </fieldset>
+      <fieldset class="card">
+        <legend>Consecutivos</legend>
+        <div class="grid3">
+          <label>Año<input name="year" type="number" inputmode="numeric"></label>
+          <label>Próximo REC<input name="nextRet" type="number" min="1" inputmode="numeric"></label>
+          <label>Próximo ENT<input name="nextEnt" type="number" min="1" inputmode="numeric"></label>
+        </div>
+        <p class="note">Si usan la app en dos celulares, arranquen cada uno en un rango distinto (por ejemplo 1 y 501) para no repetir números.</p>
+      </fieldset>
+      <fieldset class="card">
+        <legend>Clientes</legend>
+        <label>Cliente predeterminado<input name="clienteDefault" list="clientesList"></label>
+        <div id="clientsEditor"></div>
+        <button type="button" class="btn add" id="btnAddClient">+ Agregar cliente</button>
+      </fieldset>
+      <fieldset class="card">
+        <legend>Envío automático por correo</legend>
+        <label>URL del script de Google<input name="apiUrl" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/xxxxxxxx/exec"></label>
+        <label>Token secreto<input name="apiToken" type="password" autocomplete="new-password" placeholder="El mismo de la propiedad TOKEN del script"></label>
+        <button type="button" class="btn ghost small" id="btnPing">Probar conexión</button>
+        <p class="note" id="pingResult"></p>
+        <label>Correo del cliente por defecto<input name="correoClienteDefault" type="email" inputmode="email" placeholder="margarethvog@permoda.com.co"></label>
+        <label>WhatsApp por defecto <small>(opcional; si queda vacío, usted elige el chat)</small><input name="whatsappDefault" type="tel" inputmode="tel" placeholder="Ej. 350 595 5075"></label>
+        <p class="note">Cada acta se envía siempre a hycsystem176746@gmail.com y al correo del cliente (por defecto el de doña Margareth, que se puede cambiar en cada acta). Sin señal queda “Pendiente de envío” y el correo sale solo cuando vuelva la conexión. El envío por WhatsApp lo hace usted desde el celular, cuando haya señal.</p>
+      </fieldset>
+      <p class="note">&#128274; Todo (actas, fotos, firmas, ajustes) se guarda solo en este celular. Borrar los datos del navegador o desinstalar la app borra el historial.</p>
+      <p class="note muted" id="versionInfo"></p>
+      <div class="spacer"></div>
+    </form>
+    <div class="actionbar">
+      <button type="button" class="btn primary" id="btnSaveSettings">Guardar ajustes</button>
+    </div>
+  </section>
+</main>
+
+<!-- Modal de resultado -->
+<div id="modal" class="modal" hidden role="dialog" aria-modal="true">
+  <div class="sheet">
+    <div class="ok-icon">&#10003;</div>
+    <h2 id="mTitle">Acta generada</h2>
+    <p id="mSub" class="muted"></p>
+    <div id="mStatus" class="status"></div>
+    <button class="btn primary" id="mShare" type="button">Compartir PDF (WhatsApp, Gmail…)</button>
+    <button class="btn whatsapp" id="mWhats" type="button">Enviar por WhatsApp</button>
+    <div class="row2 modal-actions">
+      <button class="btn ghost small" id="mDownload" type="button">Descargar</button>
+      <button class="btn ghost small" id="mMail" type="button">Correo</button>
+    </div>
+    <button class="btn teal" id="mNew" type="button">Listo · nueva acta</button>
+  </div>
+</div>
+<template id="tplItem">
+  <div class="item">
+    <div class="item-h"><b class="item-n">Equipo 1</b><button type="button" class="btn tiny danger" data-act="remove">Quitar</button></div>
+    <label>Tipo de equipo <small>(puede elegir de la lista o escribir otro)</small>
+      <input data-f="tipo" list="tiposEquipo" placeholder="Ej. Horno, lavadora, nevera industrial" autocomplete="off">
+    </label>
+    <div class="grid2">
+      <label>Marca <small>(hogar o industrial; puede escribir otra)</small>
+        <input data-f="marca" list="marcasEquipo" placeholder="Ej. Whirlpool, Súper Nórdico" autocomplete="off">
+      </label>
+      <label>Modelo <small>(si aplica)</small>
+        <input data-f="modelo" placeholder="Opcional">
+      </label>
+    </div>
+    <div class="grid2">
+      <label>Serie <small>(si aplica)</small>
+        <input data-f="serie" placeholder="Opcional">
+      </label>
+      <label>Código interno / activo fijo del cliente <small>(si aplica)</small>
+        <input data-f="activo" placeholder="Ej. AF 155458">
+      </label>
+    </div>
+    <label>Características <small>(voltaje, capacidad, color, accesorios)</small><textarea data-f="caracteristicas" rows="2"></textarea></label>
+    <label class="w40">Cantidad<input data-f="cantidad" type="number" min="1" value="1" inputmode="numeric"></label>
+    <div class="fld"><span class="lbl">Estado físico</span><div class="seg" data-r="estado"><label><input type="radio" value="bueno"><span>Bueno</span></label><label><input type="radio" value="regular"><span>Regular</span></label><label><input type="radio" value="malo"><span>Malo</span></label></div></div>
+    <div class="grid2">
+      <div class="fld"><span class="lbl">Enciende</span><div class="seg" data-r="enciende"><label><input type="radio" value="si"><span>Sí</span></label><label><input type="radio" value="no"><span>No</span></label></div></div>
+      <div class="fld"><span class="lbl">Golpes o rayones</span><div class="seg" data-r="golpes"><label><input type="radio" value="si"><span>Sí</span></label><label><input type="radio" value="no"><span>No</span></label></div></div>
+    </div>
+    <div class="fld"><span class="lbl">Partes faltantes</span><div class="seg" data-r="faltantes"><label><input type="radio" value="no"><span>No</span></label><label><input type="radio" value="si"><span>Sí</span></label></div>
+      <input data-f="faltantesDetalle" placeholder="¿Cuáles faltan?" class="mt"></div>
+    <div class="fld"><span class="lbl">Accesorios <span class="acc-k">que acompañan el equipo</span></span>
+      <div class="chips">
+        <label class="chip"><input type="checkbox" data-c="cable"><span>Cable</span></label>
+        <label class="chip"><input type="checkbox" data-c="bandejas"><span>Bandejas</span></label>
+        <label class="chip"><input type="checkbox" data-c="puertas"><span>Puertas</span></label>
+        <label class="chip"><input type="checkbox" data-c="manuales"><span>Manuales</span></label>
+        <label class="chip"><input type="checkbox" data-c="otro"><span>Otro</span></label>
+      </div>
+      <input data-f="accOtro" placeholder="Otro accesorio" class="mt"></div>
+    <div class="only-ent">
+      <label>Trabajo realizado<textarea data-f="trabajo" rows="2"></textarea></label>
+      <label>Repuestos<textarea data-f="repuestos" rows="2"></textarea></label>
+      <div class="fld"><span class="lbl">Pruebas</span><div class="seg" data-r="pruebas"><label><input type="radio" value="ok"><span>OK</span></label><label><input type="radio" value="nook"><span>No OK</span></label></div></div>
+      <div class="fld"><span class="lbl">Garantía</span><div class="seg seg-v" data-r="garantia"><label><input type="radio" value="90"><span>90 días · reparación</span></label><label><input type="radio" value="15"><span>15 días · preventivo (solo ajustes)</span></label><label><input type="radio" value="na"><span>No aplica</span></label></div></div>
+    </div>
+    <label>Observaciones<textarea data-f="observaciones" rows="2"></textarea></label>
+  </div>
+</template>
+
+<datalist id="tiposEquipo">
+  <option value="Horno"></option>
+  <option value="Horno microondas"></option>
+  <option value="Lavadora"></option>
+  <option value="Secadora"></option>
+  <option value="Estufa"></option>
+  <option value="Nevera"></option>
+  <option value="Nevera industrial"></option>
+  <option value="Congelador"></option>
+  <option value="Cava"></option>
+  <option value="Aire acondicionado"></option>
+  <option value="Hidrolavadora"></option>
+  <option value="Crispetera"></option>
+  <option value="Secador de manos"></option>
+  <option value="Dispensador de agua"></option>
+  <option value="Otro"></option>
+</datalist>
+<datalist id="marcasEquipo">
+  <option value="Whirlpool"></option>
+  <option value="Samsung"></option>
+  <option value="LG"></option>
+  <option value="Mabe"></option>
+  <option value="Haceb"></option>
+  <option value="Electrolux"></option>
+  <option value="Challenger"></option>
+  <option value="Frigidaire"></option>
+  <option value="Súper Nórdico"></option>
+  <option value="Imbera"></option>
+  <option value="Metalfrio"></option>
+  <option value="Vitrofrio"></option>
+  <option value="Annovi Reverberi"></option>
+  <option value="True"></option>
+  <option value="Fogel"></option>
+  <option value="Indufrial"></option>
+  <option value="Torrey"></option>
+</datalist>
+<div id="toast" role="status" aria-live="polite"></div>
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="vendor/signature_pad.umd.min.js"></script>
+<script src="js/outbox-core.js"></script>
+<script src="js/pdf.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
