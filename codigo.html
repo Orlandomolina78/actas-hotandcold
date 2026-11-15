@@ -77,7 +77,7 @@ function handlePost_(e) {
   }
 
   var actaId = String(data.acta_id || &#x27;&#x27;).trim();
-  if (!/^(RET|REC|ENT)-\d{4}-\d{3,6}$/.test(actaId)) {
+  if (!/^((RET|REC|ENT|CC)-\d{4}-\d{3,6}|OS-\d{1,7})$/.test(actaId)) {
     return json_({ ok: false, error: &#x27;Consecutivo inválido&#x27; });
   }
 
@@ -107,7 +107,8 @@ function handlePost_(e) {
   }
 
   var tipoRaw = String(data.tipo || &#x27;&#x27;).toLowerCase();
-  var tipo = (tipoRaw === &#x27;retiro&#x27; || tipoRaw === &#x27;recepcion&#x27; || tipoRaw === &#x27;recepción&#x27;) ? &#x27;retiro&#x27; : &#x27;entrega&#x27;;
+  var tipo = (tipoRaw === &#x27;retiro&#x27; || tipoRaw === &#x27;recepcion&#x27; || tipoRaw === &#x27;recepción&#x27;) ? &#x27;retiro&#x27;
+    : (tipoRaw === &#x27;orden&#x27; || tipoRaw === &#x27;cobro&#x27;) ? tipoRaw : &#x27;entrega&#x27;;
   var toExtra = normalizeEmail_(data.to_extra);
   var ccList = parseEmailList_(data.cc);
   var to = [COMPANY_EMAIL];
@@ -175,7 +176,7 @@ function sanitizeFilename_(name) {
 }
 
 function defaultSubject_(tipo, id) {
-  var t = tipo === &#x27;retiro&#x27; ? &#x27;Acta de recepción&#x27; : &#x27;Acta de entrega&#x27;;
+  var t = tipo === &#x27;retiro&#x27; ? &#x27;Acta de recepción&#x27; : tipo === &#x27;orden&#x27; ? &#x27;Orden de servicio&#x27; : tipo === &#x27;cobro&#x27; ? &#x27;Cuenta de cobro&#x27; : &#x27;Acta de entrega&#x27;;
   return t + &#x27; &#x27; + id + &#x27; · &#x27; + BRAND;
 }
 
