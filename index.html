@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1B365D">
-<meta name="description" content="Actas de recepción y entrega de equipos · HOT ANDA COLD SYSTEM SAS">
+<meta name="description" content="Actas, órdenes de servicio y cuentas de cobro · HOT ANDA COLD SYSTEM SAS">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/favicon-64.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
@@ -43,12 +43,22 @@
       <span class="bc-n" id="nextEntLbl">ENT-2026-001</span>
       <span class="bc-d">Devolver equipo reparado o intervenido</span>
     </button>
+    <button class="big-choice orden" data-newdoc="orden" type="button">
+      <span class="bc-k">Nueva</span><span class="bc-t">ORDEN DE SERVICIO</span>
+      <span class="bc-n" id="nextOSLbl">No. 1042</span>
+      <span class="bc-d">Servicio al cliente: valores, garantía y firma (1 hoja)</span>
+    </button>
+    <button class="big-choice cobro" data-newdoc="cobro" type="button">
+      <span class="bc-k">Nueva</span><span class="bc-t">CUENTA DE COBRO</span>
+      <span class="bc-n" id="nextCCLbl">CC-2026-001</span>
+      <span class="bc-d">A nombre de Orlando Molina (persona natural)</span>
+    </button>
     <div id="outboxCard" class="card outbox"></div>
     <div class="row2">
       <button class="btn ghost" data-go="history" type="button">&#128209; Historial</button>
       <button class="btn ghost" data-go="settings" type="button">&#9881;&#65039; Ajustes</button>
     </div>
-    <p class="note">&#128241; Las actas y el historial se guardan <b>solo en este celular</b>. Funciona sin señal: el PDF se genera siempre y el correo sale solo cuando vuelva la conexión.</p>
+    <p class="note">&#128241; Las actas, órdenes, cuentas de cobro y el historial se guardan <b>solo en este equipo</b> (celular o computador). Funciona sin señal: el PDF se genera siempre y el correo sale solo cuando vuelva la conexión.</p>
   </section>
 
   <!-- FORMULARIO -->
@@ -140,6 +150,164 @@
     </div>
   </section>
 
+  <!-- ORDEN DE SERVICIO -->
+  <section id="view-orden" class="view" hidden>
+    <form id="ordenForm" class="docform" novalidate autocomplete="off">
+      <div class="form-head os-head">
+        <div><span class="fh-k">ORDEN DE SERVICIO</span>
+        <span class="fh-n">No. <b id="osNum" class="os-num">1042</b></span></div>
+        <span class="fh-d" id="osDate"></span>
+      </div>
+      <fieldset class="card">
+        <legend><span class="sec">1</span> Datos del cliente</legend>
+        <label>Nombre o razón social<input name="cliente" list="clientesList" placeholder="Nombre del cliente"></label>
+        <div class="grid2">
+          <label>NIT / C.C.<input name="nit" inputmode="numeric"></label>
+          <label>Teléfono<input name="telefono" type="tel" inputmode="tel"></label>
+        </div>
+        <label>Dirección<input name="direccion"></label>
+        <div class="grid2">
+          <label>Ciudad<input name="ciudad"></label>
+          <label>Ticket / OC <small>(opcional)</small><input name="ticket"></label>
+        </div>
+        <label>Fecha y hora de la visita<input name="visita" type="datetime-local"></label>
+        <div class="dest-box">
+          <div class="fld">
+            <span class="lbl">Copia de la empresa <small>(siempre se envía, no se puede quitar)</small></span>
+            <div class="locked-email js-company-email">hycsystem176746@gmail.com</div>
+          </div>
+          <label>Correo del cliente <small>(se puede cambiar en cada documento)</small><input name="correoCliente" type="email" inputmode="email" placeholder="correo@cliente.com"></label>
+        </div>
+      </fieldset>
+      <fieldset class="card">
+        <legend><span class="sec">2</span> Equipo y servicio</legend>
+        <label>Electrodoméstico<input name="eqTipo" list="tiposEquipo" placeholder="Ej. Lavadora, nevera, horno"></label>
+        <div class="grid2">
+          <label>Marca<input name="eqMarca" list="marcasEquipo" placeholder="Ej. Whirlpool"></label>
+          <label>Modelo<input name="eqModelo"></label>
+        </div>
+        <label>Serie <small>(opcional)</small><input name="eqSerie"></label>
+        <div class="fld"><span class="lbl">Tipo de servicio</span><div class="chips" id="osTipos"></div></div>
+        <label>Falla reportada por el cliente<textarea name="falla" rows="2"></textarea></label>
+        <label>Observaciones técnicas / trabajo realizado<textarea name="observaciones" rows="4"></textarea></label>
+      </fieldset>
+      <fieldset class="card">
+        <legend><span class="sec">3</span> Detalle y valores</legend>
+        <div id="osLines"></div>
+        <button type="button" class="btn add" id="osAddLine">+ Agregar línea</button>
+        <label class="switch"><input type="checkbox" name="aplicaIva"><span>Cobrar IVA (19 %)</span></label>
+        <div class="totals" id="osTotals"></div>
+        <p class="note card-note">&#128179; Si el pago es realizado con tarjeta se sumará el 5% al valor final.</p>
+        <div class="fld"><span class="lbl">Forma de pago</span><div class="chips" id="osPagos"></div></div>
+      </fieldset>
+      <fieldset class="card">
+        <legend><span class="sec">4</span> Garantía</legend>
+        <div class="seg seg-v" id="osGarantia"><label><input type="radio" name="garantia" value="90"><span>90 días · reparación</span></label><label><input type="radio" name="garantia" value="15"><span>15 días · mantenimiento preventivo (solo ajustes)</span></label><label><input type="radio" name="garantia" value="na"><span>No aplica</span></label></div>
+      </fieldset>
+      <fieldset class="card">
+        <legend><span class="sec">5</span> Firmas</legend>
+        <div class="sigblock">
+          <h3>Quien recibe · Cliente</h3>
+          <div class="sigwrap"><canvas id="osSigCli" aria-label="Firma del cliente"></canvas><span class="sighint">Firme aquí con el dedo</span></div>
+          <button type="button" class="btn small ghost" data-clear="osSigCli">Borrar firma</button>
+          <div class="grid2">
+            <label>Nombre<input name="cliNombre" placeholder="Nombre y apellido"></label>
+            <label>C.C.<input name="cliCedula" inputmode="numeric"></label>
+          </div>
+        </div>
+        <div class="sigblock">
+          <h3>Técnico Hot and Cold</h3>
+          <div class="sigwrap"><canvas id="osSigTec" aria-label="Firma del técnico"></canvas><span class="sighint">Firme aquí con el dedo</span></div>
+          <button type="button" class="btn small ghost" data-clear="osSigTec">Borrar firma</button>
+          <div class="grid2">
+            <label>Nombre<input name="tecNombre" placeholder="Nombre y apellido"></label>
+            <label>C.C.<input name="tecCedula" inputmode="numeric"></label>
+          </div>
+        </div>
+      </fieldset>
+      <div class="errors js-errors" hidden></div>
+      <div class="spacer"></div>
+    </form>
+    <div class="actionbar">
+      <button type="button" class="btn ghost small" data-discard="orden">Limpiar</button>
+      <button type="button" class="btn primary" data-generate="orden" id="osGenerate">Generar y enviar</button>
+    </div>
+  </section>
+
+  <!-- CUENTA DE COBRO -->
+  <section id="view-cobro" class="view" hidden>
+    <form id="cobroForm" class="docform" novalidate autocomplete="off">
+      <div class="form-head cc-head">
+        <div><span class="fh-k">CUENTA DE COBRO</span>
+        <span class="fh-n">No. <b id="ccNum">CC-2026-001</b></span></div>
+        <span class="fh-d" id="ccDate"></span>
+      </div>
+      <div class="card issuer" id="ccIssuer"></div>
+      <fieldset class="card">
+        <legend><span class="sec">1</span> Cliente (a quien se le cobra)</legend>
+        <label>Empresa o persona<input name="cliente" list="clientesList" placeholder="Nombre del cliente"></label>
+        <div class="grid2">
+          <label>NIT / C.C.<input name="nit" inputmode="numeric"></label>
+          <label>Teléfono<input name="telefono" type="tel" inputmode="tel"></label>
+        </div>
+        <label>Dirección<input name="direccion"></label>
+        <label>Ciudad<input name="ciudad"></label>
+        <div class="dest-box">
+          <div class="fld">
+            <span class="lbl">Copia de la empresa <small>(siempre se envía, no se puede quitar)</small></span>
+            <div class="locked-email js-company-email">hycsystem176746@gmail.com</div>
+          </div>
+          <label>Correo del cliente <small>(se puede cambiar en cada documento)</small><input name="correoCliente" type="email" inputmode="email" placeholder="correo@cliente.com"></label>
+        </div>
+      </fieldset>
+      <fieldset class="card">
+        <legend><span class="sec">2</span> Fecha y concepto</legend>
+        <div class="grid2">
+          <label>Ciudad de expedición<input name="ciudadExp"></label>
+          <label>Fecha<input name="fecha" type="date"></label>
+        </div>
+        <label>Por concepto de<textarea name="concepto" rows="3" placeholder="Describa el trabajo realizado"></textarea></label>
+      </fieldset>
+      <fieldset class="card">
+        <legend><span class="sec">3</span> Valores</legend>
+        <div id="ccLines"></div>
+        <button type="button" class="btn add" id="ccAddLine">+ Agregar línea</button>
+        <div class="totals" id="ccTotals"></div>
+      </fieldset>
+      <fieldset class="card">
+        <legend><span class="sec">4</span> Retención y seguridad social</legend>
+        <div class="seg seg-v"><label><input type="radio" name="retencion" value=""><span>Sin marcar (lo marca el cliente)</span></label><label><input type="radio" name="retencion" value="tabla383"><span>NO tomo costos: tabla art. 383 E.T.</span></label><label><input type="radio" name="retencion" value="costos"><span>SÍ tomo costos: art. 392 E.T.</span></label></div>
+        <div class="grid2">
+          <label>Planilla PILA No. <small>(opcional)</small><input name="pilaNumero" inputmode="numeric"></label>
+          <label>Periodo <small>(opcional)</small><input name="pilaPeriodo" placeholder="Ej. 2026-11"></label>
+        </div>
+      </fieldset>
+      <fieldset class="card">
+        <legend><span class="sec">5</span> Firmas</legend>
+        <div class="sigblock">
+          <h3>Firma del emisor · Orlando Molina</h3>
+          <div class="sigwrap"><canvas id="ccSigEmi" aria-label="Firma del emisor"></canvas><span class="sighint">Firme aquí con el dedo</span></div>
+          <button type="button" class="btn small ghost" data-clear="ccSigEmi">Borrar firma</button>
+        </div>
+        <div class="sigblock">
+          <h3>Recibido por el cliente <small>(opcional)</small></h3>
+          <div class="sigwrap"><canvas id="ccSigCli" aria-label="Firma de quien recibe"></canvas><span class="sighint">Firme aquí con el dedo</span></div>
+          <button type="button" class="btn small ghost" data-clear="ccSigCli">Borrar firma</button>
+          <div class="grid2">
+            <label>Nombre<input name="recNombre"></label>
+            <label>C.C. / cargo<input name="recCedula"></label>
+          </div>
+        </div>
+      </fieldset>
+      <div class="errors js-errors" hidden></div>
+      <div class="spacer"></div>
+    </form>
+    <div class="actionbar">
+      <button type="button" class="btn ghost small" data-discard="cobro">Limpiar</button>
+      <button type="button" class="btn primary" data-generate="cobro" id="ccGenerate">Generar y enviar</button>
+    </div>
+  </section>
+
   <!-- HISTORIAL -->
   <section id="view-history" class="view" hidden>
     <div class="row2">
@@ -179,11 +347,45 @@
         </div>
       </fieldset>
       <fieldset class="card">
+        <legend>Mis datos (cuenta de cobro)</legend>
+        <p class="note">Se llenan una sola vez y salen impresos en todas las cuentas de cobro. Solo a nombre de la persona natural (sin logo ni NIT de la empresa).</p>
+        <label>Nombre completo<input name="persona.nombre"></label>
+        <div class="grid2">
+          <label>Cédula<input name="persona.cedula" inputmode="numeric"></label>
+          <label>Expedida en<input name="persona.cedulaExpedida"></label>
+        </div>
+        <div class="grid2">
+          <label>Teléfono<input name="persona.telefono" type="tel"></label>
+          <label>Correo<input name="persona.email" type="email" inputmode="email"></label>
+        </div>
+        <div class="grid2">
+          <label>Dirección<input name="persona.direccion"></label>
+          <label>Ciudad<input name="persona.ciudad"></label>
+        </div>
+        <div class="grid2">
+          <label>Banco<input name="persona.banco" placeholder="Ej. Bancolombia"></label>
+          <label>Tipo de cuenta<input name="persona.tipoCuenta" placeholder="Ahorros"></label>
+        </div>
+        <label>Número de cuenta<input name="persona.numeroCuenta" inputmode="numeric"></label>
+        <label>Otro medio de pago <small>(opcional, ej. Nequi 311…)</small><input name="persona.otroPago"></label>
+      </fieldset>
+      <fieldset class="card">
+        <legend>Sedes (encabezado de la orden de servicio)</legend>
+        <div class="grid3 sede-row"><label>Sede<input name="sedes.0.nombre"></label><label>Dirección<input name="sedes.0.direccion"></label><label>Teléfono<input name="sedes.0.telefono" type="tel"></label></div>
+        <div class="grid3 sede-row"><label>Sede<input name="sedes.1.nombre"></label><label>Dirección<input name="sedes.1.direccion"></label><label>Teléfono<input name="sedes.1.telefono" type="tel"></label></div>
+        <div class="grid3 sede-row"><label>Sede<input name="sedes.2.nombre"></label><label>Dirección<input name="sedes.2.direccion"></label><label>Teléfono<input name="sedes.2.telefono" type="tel"></label></div>
+        <p class="note">Si una sede no tiene dirección, en la orden sale solo el nombre.</p>
+      </fieldset>
+      <fieldset class="card">
         <legend>Consecutivos</legend>
         <div class="grid3">
           <label>Año<input name="year" type="number" inputmode="numeric"></label>
           <label>Próximo REC<input name="nextRet" type="number" min="1" inputmode="numeric"></label>
           <label>Próximo ENT<input name="nextEnt" type="number" min="1" inputmode="numeric"></label>
+        </div>
+        <div class="grid2">
+          <label>Próxima orden de servicio No.<input name="nextOS" type="number" min="1" inputmode="numeric"></label>
+          <label>Próxima cuenta de cobro<input name="nextCC" type="number" min="1" inputmode="numeric"></label>
         </div>
         <p class="note">Si usan la app en dos celulares, arranquen cada uno en un rango distinto (por ejemplo 1 y 501) para no repetir números.</p>
       </fieldset>
@@ -222,7 +424,8 @@
     <div id="mStatus" class="status"></div>
     <button class="btn primary" id="mShare" type="button">Compartir PDF (WhatsApp, Gmail…)</button>
     <button class="btn whatsapp" id="mWhats" type="button">Enviar por WhatsApp</button>
-    <div class="row2 modal-actions">
+    <div class="row3 modal-actions">
+      <button class="btn ghost small" id="mView" type="button">Ver / imprimir</button>
       <button class="btn ghost small" id="mDownload" type="button">Descargar</button>
       <button class="btn ghost small" id="mMail" type="button">Correo</button>
     </div>
@@ -320,6 +523,8 @@
 <script src="vendor/signature_pad.umd.min.js"></script>
 <script src="js/outbox-core.js"></script>
 <script src="js/pdf.js"></script>
+<script src="js/numero-letras.js"></script>
+<script src="js/docs-pdf.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

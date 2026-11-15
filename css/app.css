@@ -138,3 +138,30 @@ input.locked-input[readonly]{background:#e8eef4;color:#1c2430;cursor:default}
 .btn.whatsapp:active{filter:brightness(.92)}
 .btn.tiny.whatsapp{margin-top:0;width:auto;background:#128C7E}
 .modal-actions{margin-top:10px}
+
+/* v1.3.0 · Orden de servicio y Cuenta de cobro */
+.big-choice.orden{background:linear-gradient(135deg,#9b2a1c,#d0482f)}
+.big-choice.cobro{background:linear-gradient(135deg,#3f3470,#5b4d9a)}
+.os-head{background:linear-gradient(135deg,#1B365D 55%,#9b2a1c)}
+.cc-head{background:linear-gradient(135deg,#3f3470,#1B365D)}
+.os-num{font-size:24px;color:#ffd7cf}
+.line{display:grid;grid-template-columns:1fr 56px;gap:4px 8px;align-items:end;border:1.5px solid var(--line);border-radius:12px;padding:4px 10px 10px;margin-top:10px;background:#fcfdfe}
+.line.cc{grid-template-columns:96px 1fr 56px}
+.line>label:first-child{grid-column:1/-1}
+.line label{margin-top:6px}
+.line .btn.tiny{min-height:56px;padding:0;width:56px;font-size:24px}
+.switch{display:flex;align-items:center;gap:12px;margin-top:16px;font-size:18px}
+.switch input{width:30px;height:30px;min-height:0;margin:0;flex:none;accent-color:var(--teal)}
+.totals{margin-top:14px;border-radius:12px;background:#f3f6fa;border:1.5px solid var(--line);padding:10px 14px}
+.totals .t-row{display:flex;justify-content:space-between;font-size:18px;padding:4px 0}
+.totals .t-total{font-size:24px;font-weight:800;color:var(--navy);border-top:1.5px solid var(--line);margin-top:4px;padding-top:8px}
+.totals .t-words{font-size:16px;font-weight:700;color:#3b4654;margin-top:4px}
+.totals .t-card{font-size:16px;color:#9b2a1c;font-weight:700}
+.card-note{color:#9b2a1c;font-weight:600}
+.issuer{border-left:5px solid #5b4d9a;font-size:17px}
+.issuer b{color:var(--navy)}
+.issuer .warn{display:block;margin-top:8px;color:var(--warn);font-weight:700}
+.badge.kind.os{background:#fbe6e2;color:#9b2a1c}
+.badge.kind.cc{background:#ebe7f7;color:#3f3470}
+@media (max-width:420px){.sede-row{grid-template-columns:1fr 1.4fr 1fr}}
+@media print{.topbar,.actionbar{display:none}}

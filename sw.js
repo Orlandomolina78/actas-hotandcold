@@ -1,8 +1,8 @@
 /* Service worker: app disponible sin señal + reintento de envío (Background Sync) */
-var CACHE = 'hc-actas-v1.2.0';
+var CACHE = 'hc-actas-v1.3.0';
 var SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
-  'js/app.js', 'js/pdf.js', 'js/outbox-core.js',
+  'js/app.js', 'js/pdf.js', 'js/outbox-core.js', 'js/numero-letras.js', 'js/docs-pdf.js',
   'vendor/jspdf.umd.min.js', 'vendor/signature_pad.umd.min.js',
   'assets/logo.jpg', 'assets/logo-ui.png',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png', 'icons/favicon-64.png'
@@ -37,7 +37,7 @@ self.addEventListener('fetch', function (e) {
 self.addEventListener('sync', function (e) {
   if (e.tag !== 'enviar-actas') return;
   e.waitUntil(self.HC.processOutbox().then(function (r) {
-    if (r && (r.failed || r.offline)) throw new Error('Quedan actas pendientes; el navegador reintentará');
+    if (r && (r.failed || r.offline)) throw new Error('Quedan documentos pendientes; el navegador reintentará');
   }));
 });
 self.addEventListener('message', function (e) {

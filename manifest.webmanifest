@@ -1,7 +1,7 @@
 {
   "name": "Actas Hot and Cold",
   "short_name": "Actas H&C",
-  "description": "Actas de recepción y entrega de equipos con firma en el celular · HOT ANDA COLD SYSTEM SAS",
+  "description": "Actas, órdenes de servicio y cuentas de cobro con firma en el celular · HOT ANDA COLD SYSTEM SAS",
   "lang": "es-CO",
   "start_url": "./index.html#home",
   "scope": "./",

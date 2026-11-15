@@ -1,7 +1,7 @@
 /* Hot and Cold · Actas — lógica de la interfaz */
 (function () {
   'use strict';
-  var APP_VERSION = '1.2.0';
+  var APP_VERSION = '1.3.0';
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
 
@@ -24,7 +24,7 @@
   function nowLabel(iso) { return HCPDF.fmtDate(iso) + ' · ' + HCPDF.fmtTime(iso); }
   function blobToDataURL(b) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = rej; r.readAsDataURL(b); }); }
   function validEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e); }
-  function kindTitle(k) { return k === 'retiro' ? 'Acta de recepción' : 'Acta de entrega'; }
+  function kindTitle(k) { return HC.kindTitle(k); }
   function recipientsOf(a) {
     var r = [S.empresa.email];
     if (a.correoCliente && validEmail(a.correoCliente)) r.push(a.correoCliente);
@@ -32,7 +32,7 @@
   }
 
   /* ---------- navegación por hash (el botón atrás de Android funciona) ---------- */
-  var VIEWS = { home: 'Actas de equipos', form: '', history: 'Historial', settings: 'Ajustes' };
+  var VIEWS = { home: 'Actas de equipos', form: '', orden: 'Orden de servicio', cobro: 'Cuenta de cobro', history: 'Historial', settings: 'Ajustes' };
   function go(v) { if (location.hash !== '#' + v) location.hash = v; else render(); }
   function currentView() { var h = (location.hash || '#home').slice(1); return VIEWS.hasOwnProperty(h) ? h : 'home'; }
   function render() {
@@ -45,6 +45,7 @@
     if (v === 'history') renderHistory();
     if (v === 'settings') renderSettings();
     if (v === 'form') { if (!$('#items').children.length) openForm(kind); setTimeout(resizePads, 30); }
+    if (v === 'orden' || v === 'cobro') { (docInit[v] ? Promise.resolve() : openDoc(v)).then(function () { setTimeout(resizePads, 30); }); }
   }
 
   /* ---------- red ---------- */
@@ -60,14 +61,16 @@
     $('#homeNit').textContent = 'NIT ' + S.empresa.nit + ' · Marca ' + S.empresa.marca;
     $('#nextRetLbl').textContent = HC.previewConsecutive(S, 'retiro');
     $('#nextEntLbl').textContent = HC.previewConsecutive(S, 'entrega');
+    $('#nextOSLbl').textContent = 'No. ' + HC.previewConsecutive(S, 'orden').replace(/^OS-/, '');
+    $('#nextCCLbl').textContent = HC.previewConsecutive(S, 'cobro');
     var all = await HC.listActas();
     var pend = all.filter(function (a) { return a.status !== 'enviado'; });
     var c = $('#outboxCard');
-    if (!all.length) c.innerHTML = '<span class="ob-i">&#128228;</span><div><b>Sin actas todavía</b><span class="muted">Aquí verá el estado de envío por correo.</span></div>';
-    else if (!pend.length) c.innerHTML = '<span class="ob-i">&#9989;</span><div><b>Todo enviado</b><span class="muted">' + all.length + ' acta(s) en el historial de este celular.</span></div>';
+    if (!all.length) c.innerHTML = '<span class="ob-i">&#128228;</span><div><b>Sin documentos todavía</b><span class="muted">Aquí verá el estado de envío por correo.</span></div>';
+    else if (!pend.length) c.innerHTML = '<span class="ob-i">&#9989;</span><div><b>Todo enviado</b><span class="muted">' + all.length + ' documento(s) en el historial de este equipo.</span></div>';
     else {
       var why = !S.apiUrl ? 'Falta configurar el script de envío en Ajustes.' : (navigator.onLine === false ? 'Sin señal: saldrán solas al volver la conexión.' : 'Se están enviando / se reintentarán automáticamente.');
-      c.innerHTML = '<span class="ob-i">&#9203;</span><div><b>' + pend.length + ' acta(s) pendiente(s) de envío</b><span class="muted">' + why + '</span></div>';
+      c.innerHTML = '<span class="ob-i">&#9203;</span><div><b>' + pend.length + ' documento(s) pendiente(s) de envío</b><span class="muted">' + why + '</span></div>';
     }
   }
 
@@ -242,8 +245,13 @@
     pad.addEventListener('endStroke', function () {
       pads[id].url = pad.toDataURL('image/png');
       canvas.parentNode.classList.add('signed');
-      saveDraftSoon();
+      padChanged(id);
     });
+  }
+  function padChanged(id) {
+    if (/^os/.test(id)) saveDocDraftSoon('orden');
+    else if (/^cc/.test(id)) saveDocDraftSoon('cobro');
+    else saveDraftSoon();
   }
   function resizePads() {
     Object.keys(pads).forEach(function (id) {
@@ -375,7 +383,7 @@
 
   /* ---------- modal de resultado / compartir ---------- */
   function showModal(a) {
-    $('#mTitle').textContent = kindTitle(a.kind) + ' ' + a.id;
+    $('#mTitle').textContent = HC.docLabel(a);
     $('#mSub').textContent = a.cliente + ' · ' + nowLabel(a.createdAt) + ' (hora de Bogotá) · ' + Math.round(a.pdf.size / 1024) + ' KB';
     $('#modal').hidden = false;
     updateModalStatus();
@@ -399,13 +407,18 @@
   }
   function pdfFile(a) { return new File([a.pdf], a.id + '_' + (a.cliente || 'acta').replace(/[^\w-]+/g, '_') + '.pdf', { type: 'application/pdf' }); }
   function shareText(a) {
+    if (a.kind === 'orden' || a.kind === 'cobro') {
+      var head = a.kind === 'cobro' ? HC.docLabel(a) + ' · ' + ((S.persona && S.persona.nombre) || '') : HC.docLabel(a) + ' · ' + S.empresa.nombre;
+      var foot = a.kind === 'cobro' ? ((S.persona && S.persona.nombre) || '') + ' · Tel. ' + ((S.persona && S.persona.telefono) || '') : S.empresa.marca + ' · Tel. ' + S.empresa.tel1 + ' · ' + S.empresa.email;
+      return [head, 'Cliente: ' + a.cliente, 'Fecha: ' + nowLabel(a.createdAt), HC.resumenTexto(a), '', foot].join('\n');
+    }
     var lines = [kindTitle(a.kind) + ' ' + a.id + ' · ' + S.empresa.nombre, 'Cliente: ' + a.cliente + (a.sede ? ' · ' + a.sede : ''), a.oc ? 'OC / REQ: ' + a.oc : '', 'Fecha: ' + nowLabel(a.createdAt), 'Equipos:', HC.resumenTexto(a), '', S.empresa.marca + ' · Tel. ' + S.empresa.tel1 + ' · ' + S.empresa.email];
     return lines.filter(function (l, i) { return l !== '' || i === 6; }).join('\n');
   }
   async function shareActa(a) {
     var f = pdfFile(a);
     if (navigator.canShare && navigator.canShare({ files: [f] })) {
-      try { await navigator.share({ files: [f], title: kindTitle(a.kind) + ' ' + a.id, text: shareText(a) }); }
+      try { await navigator.share({ files: [f], title: HC.docLabel(a), text: shareText(a) }); }
       catch (e) { if (e && e.name !== 'AbortError') { toast('No se pudo compartir; se descargó el PDF'); downloadActa(a); } }
     } else {
       downloadActa(a);
@@ -428,7 +441,7 @@
     var text = shareText(a);
     if (navigator.canShare && navigator.canShare({ files: [f] })) {
       try {
-        await navigator.share({ files: [f], title: kindTitle(a.kind) + ' ' + a.id, text: text });
+        await navigator.share({ files: [f], title: HC.docLabel(a), text: text });
         return;
       } catch (e) {
         if (e && e.name === 'AbortError') return;
@@ -437,7 +450,7 @@
     downloadActa(a);
     var tel = String((S && S.whatsappDefault) || a.telefono || '').replace(/\D/g, '');
     if (tel.length === 10 && tel[0] === '3') tel = '57' + tel;
-    var url = 'https://wa.me/' + (tel.length >= 11 ? tel : '') + '?text=' + encodeURIComponent(text + '\n\n(El PDF del acta se descargó; adjúntelo en el chat.)');
+    var url = 'https://wa.me/' + (tel.length >= 11 ? tel : '') + '?text=' + encodeURIComponent(text + '\n\n(El PDF se descargó; adjúntelo en el chat.)');
     toast('Se descargó el PDF para adjuntarlo en WhatsApp', 4000);
     window.open(url, '_blank');
   }
@@ -445,8 +458,8 @@
     var to = a.correoCliente && validEmail(a.correoCliente) ? a.correoCliente : S.empresa.email;
     var cc = to === S.empresa.email ? '' : S.empresa.email;
     var url = 'mailto:' + encodeURIComponent(to) + '?' + (cc ? 'cc=' + encodeURIComponent(cc) + '&' : '') +
-      'subject=' + encodeURIComponent(kindTitle(a.kind) + ' ' + a.id + ' · ' + a.cliente + ' · ' + S.empresa.marca) +
-      '&body=' + encodeURIComponent(shareText(a) + '\n\nAdjunto el PDF del acta.');
+      'subject=' + encodeURIComponent(HC.emailSubject(a, S)) +
+      '&body=' + encodeURIComponent(shareText(a) + '\n\nAdjunto el PDF.');
     location.href = url;
   }
 
@@ -475,14 +488,20 @@
     S = await HC.getSettings();
     var list = await HC.listActas();
     var box = $('#historyList');
-    if (!list.length) { box.innerHTML = '<div class="empty">Todavía no hay actas en este celular.</div>'; return; }
+    if (!list.length) { box.innerHTML = '<div class="empty">Todavía no hay documentos en este equipo.</div>'; return; }
+    var KB = { entrega: ['Entrega', 'ent'], retiro: ['Recepción', ''], orden: ['Orden de servicio', 'os'], cobro: ['Cuenta de cobro', 'cc'] };
     box.innerHTML = list.map(function (a) {
-      var eq = (a.items || []).map(function (it) {
+      var det;
+      if (a.kind === 'orden') det = [a.equipo && a.equipo.tipo, a.equipo && a.equipo.marca, 'Total ' + HC.money(a.total)].filter(Boolean).join(' · ');
+      else if (a.kind === 'cobro') det = 'Valor ' + HC.money(a.total) + ' · ' + String(a.concepto || '').slice(0, 60);
+      else det = (a.items || []).map(function (it) {
         return [it.tipo, it.marca, it.modelo, it.serie ? ('Serie ' + it.serie) : '', it.activo ? ('Activo ' + it.activo) : ''].filter(Boolean).join(' · ');
       }).join(' | ');
+      var kb = KB[a.kind] || KB.entrega;
+      var shown = a.kind === 'orden' ? 'OS No. ' + String(a.id).replace(/^OS-/, '') : a.id;
       return '<div class="hcard" data-id="' + esc(a.id) + '">' +
-        '<div class="hc-top"><span class="hc-id">' + esc(a.id) + '</span><span class="badge kind ' + (a.kind === 'entrega' ? 'ent' : '') + '">' + (a.kind === 'entrega' ? 'Entrega' : 'Recepción') + '</span></div>' +
-        '<div class="hc-meta">' + esc(a.cliente) + (a.oc ? ' · ' + esc(a.oc) : '') + '<br>' + esc(nowLabel(a.createdAt)) + ' · ' + esc(eq) + '</div>' +
+        '<div class="hc-top"><span class="hc-id">' + esc(shown) + '</span><span class="badge kind ' + kb[1] + '">' + kb[0] + '</span></div>' +
+        '<div class="hc-meta">' + esc(a.cliente) + (a.oc ? ' · ' + esc(a.oc) : '') + '<br>' + esc(nowLabel(a.createdAt)) + ' · ' + esc(det) + '</div>' +
         '<div class="hc-meta">' + statusHtml(a, false) + '</div>' +
         '<div class="hc-btns"><button class="btn tiny ghost" data-h="view">Ver PDF</button><button class="btn tiny ghost" data-h="share">Compartir</button>' +
         '<button class="btn tiny whatsapp" data-h="whats">Enviar por WhatsApp</button>' +
@@ -503,7 +522,7 @@
       if (navigator.onLine === false) toast('Sin señal: quedó en cola');
     }
     if (act === 'del') {
-      if (a.status !== 'enviado' && !confirm('Esta acta NO se ha enviado por correo. ¿Eliminarla igual?')) return;
+      if (a.status !== 'enviado' && !confirm('Este documento NO se ha enviado por correo. ¿Eliminarlo igual?')) return;
       if (!confirm('¿Eliminar ' + a.id + ' de este celular? No se puede deshacer.')) return;
       await HC.deleteActa(id); renderHistory();
     }
@@ -514,6 +533,16 @@
     var EST = { bueno: 'Bueno', regular: 'Regular', malo: 'Malo' };
     var rows = [head];
     list.forEach(function (a) {
+      if (a.kind === 'orden' || a.kind === 'cobro') {
+        var env = a.status === 'enviado' ? 'Correo enviado ' + nowLabel(a.sentAt) : 'Correo pendiente de envío';
+        if (a.kind === 'orden') {
+          var e = a.equipo || {};
+          rows.push(['', HCPDF.fmtDate(a.createdAt), 'Orden de servicio', a.cliente, [a.direccion, a.ciudad].filter(Boolean).join(', '), a.ticket, e.tipo, e.marca, e.modelo, e.serie, '', a.tipoServicio, '', (a.firmaTecnico || {}).nombre, 'OS No. ' + a.numero, ['Total ' + HC.money(a.total), a.falla ? 'Falla: ' + a.falla : '', a.observaciones || '', env].filter(Boolean).join(' | ')]);
+        } else {
+          rows.push(['', HCPDF.fmtDate(a.createdAt), 'Cuenta de cobro', a.cliente, [a.direccion, a.ciudad].filter(Boolean).join(', '), '', '', '', '', '', '', a.concepto, '', '', a.id, ['Valor ' + HC.money(a.total), env].join(' | ')]);
+        }
+        return;
+      }
       (a.items || []).forEach(function (it) {
         var estado = [EST[it.estado] || '', it.enciende ? 'Enciende: ' + (it.enciende === 'si' ? 'Sí' : 'No') : '', it.pruebas ? 'Pruebas: ' + (it.pruebas === 'ok' ? 'OK' : 'No OK') : ''].filter(Boolean).join(' · ');
         var obs = [it.trabajo ? 'Trabajo: ' + it.trabajo : '', it.repuestos ? 'Repuestos: ' + it.repuestos : '', it.garantia ? 'Garantía: ' + (HCPDF.GARANTIAS[it.garantia] || '') : '', it.observaciones || '', a.status === 'enviado' ? 'Correo enviado ' + nowLabel(a.sentAt) : 'Correo pendiente de envío'].filter(Boolean).join(' | ');
@@ -592,11 +621,278 @@
     } catch (e) { out.textContent = '❌ ' + (e.message || e); }
   }
 
+  /* ================= ORDEN DE SERVICIO y CUENTA DE COBRO (v1.3.0) ================= */
+  var DOCF = { orden: '#ordenForm', cobro: '#cobroForm' };
+  var PADS_OF = { orden: ['osSigCli', 'osSigTec'], cobro: ['ccSigEmi', 'ccSigCli'] };
+  var DOC_FIELDS = {
+    orden: ['cliente', 'nit', 'telefono', 'direccion', 'ciudad', 'ticket', 'visita', 'correoCliente', 'eqTipo', 'eqMarca', 'eqModelo', 'eqSerie', 'falla', 'observaciones', 'cliNombre', 'cliCedula', 'tecNombre', 'tecCedula'],
+    cobro: ['cliente', 'nit', 'telefono', 'direccion', 'ciudad', 'correoCliente', 'ciudadExp', 'fecha', 'concepto', 'pilaNumero', 'pilaPeriodo', 'recNombre', 'recCedula']
+  };
+  var docInit = {}, docTimer = {}, docRestoring = false;
+  var MAX_LINES = { orden: 10, cobro: 8 };
+
+  function digits(v) { return parseInt(String(v == null ? '' : v).replace(/\D/g, ''), 10) || 0; }
+  function fmtNum(n) { n = digits(n); return n ? String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.') : ''; }
+  function localNow() {
+    var o = {};
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+      .formatToParts(new Date()).forEach(function (x) { o[x.type] = x.value; });
+    return o.year + '-' + o.month + '-' + o.day + 'T' + o.hour + ':' + o.minute;
+  }
+  function docForm(k) { return $(DOCF[k]); }
+  function docBlank(k) {
+    if (k === 'orden') return {
+      ciudad: 'Bogotá D.C.', visita: localNow(), tipoServicio: 'Reparación', lineas: [{}], aplicaIva: false, formaPago: [], garantia: '90',
+      tecNombre: S.tecnico.nombre || '', tecCedula: S.tecnico.cedula || ''
+    };
+    return { ciudad: 'Bogotá D.C.', ciudadExp: (S.persona && S.persona.ciudad) || 'Bogotá D.C.', fecha: localNow().slice(0, 10), items: [{ cant: 1 }], retencion: '' };
+  }
+  function personaMissing() {
+    var P = S.persona || {}, miss = [];
+    if (!P.cedula) miss.push('cédula');
+    if (!P.direccion) miss.push('dirección');
+    if (!P.email) miss.push('correo');
+    if (!P.banco || !P.numeroCuenta) miss.push('cuenta donde le pagan');
+    return miss;
+  }
+  function renderIssuer() {
+    var P = S.persona || {}, miss = personaMissing();
+    $('#ccIssuer').innerHTML = '<span class="muted">Emitida por (persona natural):</span><br><b>' + esc(P.nombre) + '</b><br>' +
+      'C.C. ' + esc(P.cedula || '____') + ' · Tel. ' + esc(P.telefono || '____') + '<br>' + esc(P.direccion || 'Dirección: ____') + (P.email ? ' · ' + esc(P.email) : '') +
+      (P.banco ? '<br>Pago: ' + esc([P.banco, P.tipoCuenta, P.numeroCuenta].filter(Boolean).join(' · ')) : '') +
+      (miss.length ? '<span class="warn">&#9888;&#65039; Faltan sus datos: ' + esc(miss.join(', ')) + '. Llénelos una vez en Ajustes › Mis datos (saldrán en blanco mientras tanto).</span>' : '');
+  }
+
+  async function openDoc(k, fresh) {
+    S = await HC.getSettings();
+    var draft = fresh ? null : await HC.kvGet('draft_' + k);
+    var now = new Date().toISOString();
+    if (k === 'orden') {
+      $('#osNum').textContent = HC.previewConsecutive(S, 'orden').replace(/^OS-/, '');
+      $('#osDate').textContent = nowLabel(now) + '\n(hora de Bogotá)';
+      $('#osTipos').innerHTML = HCDOCS.TIPOS_OS.map(function (t) { return '<label class="chip"><input type="radio" name="tipoServicio" value="' + esc(t) + '"><span>' + esc(t) + '</span></label>'; }).join('');
+      $('#osPagos').innerHTML = HCDOCS.PAGOS_OS.map(function (t) { return '<label class="chip"><input type="checkbox" name="formaPago" value="' + esc(t) + '"><span>' + esc(t) + '</span></label>'; }).join('');
+    } else {
+      $('#ccNum').textContent = HC.previewConsecutive(S, 'cobro');
+      $('#ccDate').textContent = nowLabel(now) + '\n(hora de Bogotá)';
+      renderIssuer();
+    }
+    $('#clientesList').innerHTML = (S.clientes || []).map(function (c) { return '<option value="' + esc(c.nombre) + '">'; }).join('');
+    $$('.js-company-email').forEach(function (e) { e.textContent = S.empresa.email || HC.COMPANY_EMAIL; });
+    fillDoc(k, draft || docBlank(k));
+    $('.js-errors', docForm(k)).hidden = true;
+    docInit[k] = true;
+  }
+
+  function fillDoc(k, d) {
+    docRestoring = true;
+    var f = docForm(k);
+    DOC_FIELDS[k].forEach(function (n) { if (f.elements[n]) f.elements[n].value = d[n] || ''; });
+    var box = $(k === 'orden' ? '#osLines' : '#ccLines'); box.innerHTML = '';
+    var lines = k === 'orden' ? d.lineas : d.items;
+    (lines && lines.length ? lines : [{}]).forEach(function (l) { addLine(k, l); });
+    if (k === 'orden') {
+      $$('input[name="tipoServicio"]', f).forEach(function (r) { r.checked = r.value === d.tipoServicio; });
+      $$('input[name="formaPago"]', f).forEach(function (c) { c.checked = (d.formaPago || []).indexOf(c.value) >= 0; });
+      $$('input[name="garantia"]', f).forEach(function (r) { r.checked = r.value === d.garantia; });
+      f.elements.aplicaIva.checked = !!d.aplicaIva;
+    } else {
+      $$('input[name="retencion"]', f).forEach(function (r) { r.checked = r.value === (d.retencion || ''); });
+    }
+    PADS_OF[k].forEach(function (id) { setPadData(id, d[id] || null); });
+    updateTotals(k);
+    docRestoring = false;
+  }
+
+  function addLine(k, l) {
+    l = l || {};
+    var box = $(k === 'orden' ? '#osLines' : '#ccLines');
+    if (box.children.length >= MAX_LINES[k]) { toast('Máximo ' + MAX_LINES[k] + ' líneas para que quepa en una hoja'); return null; }
+    var d = document.createElement('div');
+    d.className = 'line' + (k === 'cobro' ? ' cc' : '');
+    d.innerHTML = '<label>Descripción<input data-l="desc"></label>' +
+      (k === 'cobro' ? '<label>Cant.<input data-l="cant" inputmode="numeric"></label><label>Valor unitario<input data-l="vu" inputmode="numeric" placeholder="$"></label>'
+        : '<label>Valor<input data-l="valor" inputmode="numeric" placeholder="$"></label>') +
+      '<button type="button" class="btn tiny danger" aria-label="Quitar línea">&times;</button>';
+    $('[data-l="desc"]', d).value = l.desc || '';
+    if (k === 'cobro') { $('[data-l="cant"]', d).value = l.cant || 1; $('[data-l="vu"]', d).value = fmtNum(l.vu); }
+    else $('[data-l="valor"]', d).value = fmtNum(l.valor);
+    $$('[data-l="valor"],[data-l="vu"]', d).forEach(function (i) { i.addEventListener('blur', function () { i.value = fmtNum(i.value); }); });
+    $('button', d).addEventListener('click', function () {
+      if (box.children.length <= 1) { $$('input', d).forEach(function (i) { i.value = i.dataset.l === 'cant' ? 1 : ''; }); }
+      else d.remove();
+      updateTotals(k); saveDocDraftSoon(k);
+    });
+    box.appendChild(d);
+    return d;
+  }
+  function collectLines(k) {
+    return $$((k === 'orden' ? '#osLines' : '#ccLines') + ' .line').map(function (d) {
+      var desc = $('[data-l="desc"]', d).value.trim();
+      if (k === 'cobro') return { desc: desc, cant: digits($('[data-l="cant"]', d).value) || 1, vu: digits($('[data-l="vu"]', d).value) };
+      return { desc: desc, valor: digits($('[data-l="valor"]', d).value) };
+    });
+  }
+  function collectDoc(k) {
+    var f = docForm(k), d = { kind: k };
+    DOC_FIELDS[k].forEach(function (n) { d[n] = (f.elements[n].value || '').trim(); });
+    if (k === 'orden') {
+      d.lineas = collectLines(k);
+      var t = $('input[name="tipoServicio"]:checked', f); d.tipoServicio = t ? t.value : '';
+      d.formaPago = $$('input[name="formaPago"]:checked', f).map(function (c) { return c.value; });
+      var g = $('input[name="garantia"]:checked', f); d.garantia = g ? g.value : '';
+      d.aplicaIva = f.elements.aplicaIva.checked;
+    } else {
+      d.items = collectLines(k);
+      var r = $('input[name="retencion"]:checked', f); d.retencion = r ? r.value : '';
+    }
+    PADS_OF[k].forEach(function (id) { d[id] = pads[id] && pads[id].url ? pads[id].url : null; });
+    return d;
+  }
+  function updateTotals(k) {
+    var lines = collectLines(k), m = HCDOCS.money;
+    if (k === 'orden') {
+      var f = docForm(k);
+      var t = HCDOCS.totalsOS({ lineas: lines, aplicaIva: f.elements.aplicaIva.checked, ivaPct: 19 });
+      var tarjeta = $$('input[name="formaPago"]:checked', f).some(function (c) { return c.value === 'Tarjeta (Bold)'; });
+      $('#osTotals').innerHTML = '<div class="t-row"><span>Valor antes de IVA</span><b>' + m(t.subtotal) + '</b></div>' +
+        '<div class="t-row"><span>IVA' + (f.elements.aplicaIva.checked ? ' (19 %)' : '') + '</span><b>' + (f.elements.aplicaIva.checked ? m(t.iva) : 'No aplica') + '</b></div>' +
+        '<div class="t-row t-total"><span>TOTAL</span><span id="osTotal">' + m(t.total) + '</span></div>' +
+        (tarjeta ? '<div class="t-card">Pagando con tarjeta (+5 %): ' + m(t.conTarjeta) + '</div>' : '');
+    } else {
+      var tot = HCDOCS.totalCC({ items: lines });
+      $('#ccTotals').innerHTML = '<div class="t-row t-total"><span>TOTAL</span><span id="ccTotal">' + m(tot) + '</span></div><div class="t-words" id="ccWords">' + esc(numeroALetras(tot)) + '</div>';
+    }
+  }
+  function saveDocDraftSoon(k) {
+    if (docRestoring || !docInit[k]) return;
+    clearTimeout(docTimer[k]);
+    docTimer[k] = setTimeout(function () { HC.kvSet('draft_' + k, collectDoc(k)).catch(function () {}); }, 500);
+  }
+
+  function validateDoc(k, d) {
+    var errs = [], f = docForm(k);
+    $$('.invalid', f).forEach(function (e) { e.classList.remove('invalid'); });
+    function bad(name, msg) { errs.push(msg); var el = f.elements[name]; if (el && el.classList) el.classList.add('invalid'); }
+    if (!d.cliente) bad('cliente', 'Escriba el nombre del cliente.');
+    if (d.correoCliente && !validEmail(d.correoCliente)) bad('correoCliente', 'El correo del cliente no es válido.');
+    if (k === 'orden') {
+      if (!d.eqTipo) bad('eqTipo', 'Indique el electrodoméstico (lavadora, nevera, horno…).');
+      if (!d.cliNombre) bad('cliNombre', 'Falta el nombre de quien recibe (cliente).');
+      if (!d.tecNombre) bad('tecNombre', 'Falta el nombre del técnico.');
+      if (!d.osSigCli) errs.push('Falta la firma del cliente.');
+      if (!d.osSigTec) errs.push('Falta la firma del técnico.');
+    } else {
+      if (!d.concepto) bad('concepto', 'Escriba el concepto del cobro.');
+      if (!HCDOCS.totalCC({ items: d.items })) errs.push('Escriba el valor (al menos una línea con valor).');
+      if (!d.ccSigEmi) errs.push('Falta la firma del emisor.');
+    }
+    return errs;
+  }
+
+  async function generateDoc(k) {
+    var btn = $(k === 'orden' ? '#osGenerate' : '#ccGenerate');
+    if (btn.disabled) return;
+    S = await HC.getSettings();
+    var d = collectDoc(k), errs = validateDoc(k, d), box = $('.js-errors', docForm(k));
+    if (errs.length) {
+      box.innerHTML = '<b>Revise antes de generar:</b><ul>' + errs.map(function (e) { return '<li>' + esc(e) + '</li>'; }).join('') + '</ul>';
+      box.hidden = false; box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    box.hidden = true;
+    if (k === 'cobro') {
+      var miss = personaMissing();
+      if (miss.length && !confirm('Faltan sus datos (' + miss.join(', ') + '). Saldrán como espacios en blanco. ¿Generar igual?')) return;
+    }
+    btn.disabled = true; btn.textContent = 'Generando PDF…';
+    try {
+      var id = await HC.takeConsecutive(k);
+      var now = new Date().toISOString(), rec, doc;
+      if (!logoData) logoData = await loadLogo();
+      if (k === 'orden') {
+        var lineas = d.lineas.filter(function (l) { return l.desc || l.valor; });
+        var t = HCDOCS.totalsOS({ lineas: lineas, aplicaIva: d.aplicaIva, ivaPct: 19 });
+        var sc = trimmedSignature('osSigCli'), st = trimmedSignature('osSigTec');
+        rec = {
+          id: id, kind: 'orden', numero: parseInt(id.replace(/^OS-/, ''), 10), createdAt: now,
+          cliente: d.cliente, nit: d.nit, telefono: d.telefono, direccion: d.direccion, ciudad: d.ciudad, ticket: d.ticket, visita: d.visita, correoCliente: d.correoCliente,
+          tipoServicio: d.tipoServicio, equipo: { tipo: d.eqTipo, marca: d.eqMarca, modelo: d.eqModelo, serie: d.eqSerie },
+          falla: d.falla, observaciones: d.observaciones, lineas: lineas, aplicaIva: d.aplicaIva, ivaPct: 19,
+          subtotal: t.subtotal, iva: t.iva, total: t.total, formaPago: d.formaPago, garantia: d.garantia,
+          firmaCliente: { nombre: d.cliNombre, cedula: d.cliCedula, firma: sc && sc.data, firmaW: sc && sc.w, firmaH: sc && sc.h, firmadoEn: now },
+          firmaTecnico: { nombre: d.tecNombre, cedula: d.tecCedula, firma: st && st.data, firmaW: st && st.w, firmaH: st && st.h, firmadoEn: now },
+          status: 'pendiente', attempts: 0, appVersion: APP_VERSION
+        };
+        doc = HCDOCS.buildOrden(rec, S, logoData);
+      } else {
+        var items = d.items.filter(function (l) { return l.desc || l.vu; });
+        var se = trimmedSignature('ccSigEmi'), sr = trimmedSignature('ccSigCli');
+        rec = {
+          id: id, kind: 'cobro', createdAt: now, fecha: d.fecha, ciudadExp: d.ciudadExp || 'Bogotá D.C.',
+          cliente: d.cliente, nit: d.nit, telefono: d.telefono, direccion: d.direccion, ciudad: d.ciudad, correoCliente: d.correoCliente,
+          deudor: { nombre: d.cliente, nit: d.nit, direccion: d.direccion, ciudad: d.ciudad, telefono: d.telefono, email: d.correoCliente },
+          concepto: d.concepto, items: items, total: HCDOCS.totalCC({ items: items }), retencion: d.retencion,
+          pila: { numero: d.pilaNumero, periodo: d.pilaPeriodo },
+          firmaEmisor: se ? { firma: se.data, firmaW: se.w, firmaH: se.h } : null,
+          firmaRecibe: (sr || d.recNombre) ? { nombre: d.recNombre, cedula: d.recCedula, firma: sr && sr.data, firmaW: sr && sr.w, firmaH: sr && sr.h } : null,
+          emisor: Object.assign({}, S.persona),
+          status: 'pendiente', attempts: 0, appVersion: APP_VERSION
+        };
+        doc = HCDOCS.buildCuenta(Object.assign({}, rec, { ciudad: rec.ciudadExp }), S.persona);
+      }
+      rec.pdf = doc.output('blob');
+      rec.pdfPages = doc.getNumberOfPages();
+      rec.pdfSize = rec.pdf.size;
+      await HC.putActa(rec);
+      await rememberClient(rec);
+      await HC.kvDel('draft_' + k);
+      lastActa = rec;
+      await openDoc(k, true);
+      showModal(rec);
+      requestSync();
+      HC.processOutbox().then(updateModalStatus);
+    } catch (e) {
+      console.error(e);
+      alert('No se pudo generar el documento: ' + (e && e.message ? e.message : e));
+    } finally {
+      btn.disabled = false; btn.textContent = 'Generar y enviar';
+    }
+  }
+
+  function bindDocForms() {
+    ['orden', 'cobro'].forEach(function (k) {
+      var f = docForm(k);
+      f.addEventListener('input', function (e) { if (e.target.dataset && e.target.dataset.l) updateTotals(k); saveDocDraftSoon(k); });
+      f.addEventListener('change', function (e) {
+        if (e.target.name === 'cliente') {
+          var c = findClient(e.target.value);
+          if (c) [['nit', 'nit'], ['correoCliente', 'correo'], ['direccion', 'direccion'], ['ciudad', 'ciudad'], ['telefono', 'telefono']]
+            .forEach(function (m) { if (c[m[1]]) f.elements[m[0]].value = c[m[1]]; });
+        }
+        if (e.target.name === 'aplicaIva' || e.target.name === 'formaPago') updateTotals(k);
+        e.target.classList && e.target.classList.remove('invalid');
+        saveDocDraftSoon(k);
+      });
+    });
+    $('#osAddLine').addEventListener('click', function () { var n = addLine('orden'); if (n) { $('input', n).focus(); saveDocDraftSoon('orden'); } });
+    $('#ccAddLine').addEventListener('click', function () { var n = addLine('cobro'); if (n) { $('input', n).focus(); saveDocDraftSoon('cobro'); } });
+    $$('[data-newdoc]').forEach(function (b) { b.addEventListener('click', function () { openDoc(b.dataset.newdoc).then(function () { go(b.dataset.newdoc); }); }); });
+    $$('[data-generate]').forEach(function (b) { b.addEventListener('click', function () { generateDoc(b.dataset.generate); }); });
+    $$('[data-discard]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var k = b.dataset.discard;
+        if (confirm('¿Limpiar el formulario? Se pierde lo que lleva escrito.')) { HC.kvDel('draft_' + k); openDoc(k, true); }
+      });
+    });
+  }
+
   /* ---------- arranque ---------- */
   async function init() {
     S = await HC.getSettings();
-    initPad('sigTec'); initPad('sigCli');
-    $$('[data-clear]').forEach(function (b) { b.addEventListener('click', function () { setPadData(b.dataset.clear, null); saveDraftSoon(); }); });
+    ['sigTec', 'sigCli', 'osSigCli', 'osSigTec', 'ccSigEmi', 'ccSigCli'].forEach(initPad);
+    $$('[data-clear]').forEach(function (b) { b.addEventListener('click', function () { setPadData(b.dataset.clear, null); padChanged(b.dataset.clear); }); });
+    bindDocForms();
     $$('[data-new]').forEach(function (b) { b.addEventListener('click', function () { openForm(b.dataset.new).then(function () { go('form'); }); }); });
     $$('[data-go]').forEach(function (b) { b.addEventListener('click', function () { go(b.dataset.go); }); });
     $('#btnBack').addEventListener('click', function () { if (history.length > 1) history.back(); else go('home'); });
@@ -622,6 +918,7 @@
     });
     $('#mShare').addEventListener('click', function () { shareActa(lastActa); });
     $('#mDownload').addEventListener('click', function () { downloadActa(lastActa); });
+    $('#mView').addEventListener('click', function () { viewActa(lastActa); });
     $('#mWhats').addEventListener('click', function () { whatsActa(lastActa); });
     $('#mMail').addEventListener('click', function () { mailActa(lastActa); });
     $('#mNew').addEventListener('click', function () { $('#modal').hidden = true; window.scrollTo(0, 0); setTimeout(resizePads, 30); });
@@ -651,10 +948,11 @@
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function () {});
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function (e) { console.warn('SW', e); });
     if (currentView() === 'form') await openForm(kind);
+    if (currentView() === 'orden' || currentView() === 'cobro') await openDoc(currentView());
     render();
     kickOutbox();
   }
 
-  window.HCApp = { version: APP_VERSION, kickOutbox: kickOutbox };
+  window.HCApp = { version: APP_VERSION, kickOutbox: kickOutbox, openDoc: openDoc };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

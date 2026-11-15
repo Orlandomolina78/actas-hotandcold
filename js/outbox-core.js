@@ -41,6 +41,18 @@
     year: 2026,
     nextRet: 1,
     nextEnt: 1,
+    nextOS: 1042,          // Orden de servicio: sigue la numeración del talonario (no se reinicia por año)
+    nextCC: 1,             // Cuenta de cobro: CC-AAAA-001, se reinicia cada año
+    sedes: [
+      { nombre: 'Principal', direccion: 'CR 17 No. 67-42', telefono: '' },
+      { nombre: 'Suba', direccion: '', telefono: '' },
+      { nombre: 'Salitre', direccion: '', telefono: '' }
+    ],
+    /* Mis datos (cuenta de cobro): persona natural, se llenan una vez en Ajustes */
+    persona: {
+      nombre: 'ORLANDO JAVIER MOLINA ESCOBAR', cedula: '', cedulaExpedida: '', telefono: '311 866 1394',
+      direccion: '', ciudad: 'Bogotá D.C.', email: '', banco: '', tipoCuenta: '', numeroCuenta: '', otroPago: ''
+    },
     apiUrl: '',
     apiToken: '',
     deviceId: ''
@@ -100,13 +112,16 @@
     var s = clone(DEFAULTS);
     if (saved) {
       Object.keys(saved).forEach(function (k) {
-        if (k === 'empresa' || k === 'tecnico') s[k] = Object.assign({}, s[k], saved[k] || {});
+        if (k === 'empresa' || k === 'tecnico' || k === 'persona') s[k] = Object.assign({}, s[k], saved[k] || {});
         else s[k] = saved[k];
       });
     }
     s.empresa.email = COMPANY_EMAIL;
     if (!s.correoClienteDefault) s.correoClienteDefault = DEFAULT_TO_EXTRA;
     if (s.whatsappDefault == null) s.whatsappDefault = '';
+    if (!(parseInt(s.nextOS, 10) >= 1)) s.nextOS = DEFAULTS.nextOS;
+    if (!(parseInt(s.nextCC, 10) >= 1)) s.nextCC = 1;
+    if (!Array.isArray(s.sedes) || !s.sedes.length) s.sedes = clone(DEFAULTS.sedes);
     (s.clientes || []).forEach(function (c) {
       if ((c.nombre || '').trim().toLowerCase() === 'permoda' && !c.correo) c.correo = DEFAULT_TO_EXTRA;
     });
@@ -127,22 +142,28 @@
 
   function pad3(n) { return String(n).padStart(3, '0'); }
 
+  var PREFIX = { retiro: 'REC-', entrega: 'ENT-', cobro: 'CC-' };
+  var NEXT_KEY = { retiro: 'nextRet', entrega: 'nextEnt', cobro: 'nextCC', orden: 'nextOS' };
+  function fmtId(kind, y, n) { return kind === 'orden' ? 'OS-' + n : PREFIX[kind] + y + '-' + pad3(n); }
+
   function previewConsecutive(s, kind) {
     var y = bogotaYear();
-    var n = (s.year !== y) ? 1 : (kind === 'retiro' ? s.nextRet : s.nextEnt);
-    return (kind === 'retiro' ? 'REC-' : 'ENT-') + y + '-' + pad3(n);
+    var n = (s.year !== y && kind !== 'orden') ? 1 : parseInt(s[NEXT_KEY[kind]], 10) || 1;
+    return fmtId(kind, y, n);
   }
 
-  /* Reserva el consecutivo de forma atómica (una sola transacción). */
+  /* Reserva el consecutivo de forma atómica (una sola transacción).
+   * REC/ENT/CC se reinician cada año; la orden de servicio (OS) sigue el talonario. */
   function takeConsecutive(kind) {
     return withStore('kv', 'readwrite', async function (st) {
       var s = mergeSettings(await reqP(st.get('settings')));
       var y = bogotaYear();
-      if (s.year !== y) { s.year = y; s.nextRet = 1; s.nextEnt = 1; }
-      var n = kind === 'retiro' ? s.nextRet : s.nextEnt;
-      if (kind === 'retiro') s.nextRet = n + 1; else s.nextEnt = n + 1;
+      if (s.year !== y) { s.year = y; s.nextRet = 1; s.nextEnt = 1; s.nextCC = 1; }
+      var key = NEXT_KEY[kind];
+      var n = parseInt(s[key], 10) || 1;
+      s[key] = n + 1;
       await reqP(st.put(s, 'settings'));
-      return (kind === 'retiro' ? 'REC-' : 'ENT-') + y + '-' + pad3(n);
+      return fmtId(kind, y, n);
     });
   }
 
@@ -163,14 +184,25 @@
     return !(typeof navigator !== 'undefined' && navigator.onLine === false);
   }
 
+  function money(n) { n = Math.round(Number(n) || 0); return '$ ' + n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+
   function resumenTexto(a) {
+    if (a.kind === 'orden') {
+      var e = a.equipo || {};
+      return [[e.tipo, e.marca, e.modelo, e.serie ? ('Serie ' + e.serie) : ''].filter(Boolean).join(' · '),
+        a.falla ? 'Falla: ' + a.falla : '', 'Total: ' + money(a.total)].filter(Boolean).join('\n');
+    }
+    if (a.kind === 'cobro') return (a.concepto || '') + '\nValor: ' + money(a.total);
     var eq = (a.items || []).map(function (it, i) {
       return (i + 1) + '. ' + [it.tipo, it.marca, it.modelo, it.serie ? ('Serie ' + it.serie) : '', it.activo ? ('Activo ' + it.activo) : ''].filter(Boolean).join(' · ');
     }).join('\n');
     return eq;
   }
 
-  function kindTitle(k) { return k === 'retiro' ? 'Acta de recepción' : 'Acta de entrega'; }
+  function kindTitle(k) {
+    return { retiro: 'Acta de recepción', entrega: 'Acta de entrega', orden: 'Orden de servicio', cobro: 'Cuenta de cobro' }[k] || 'Acta';
+  }
+  function docLabel(a) { return a.kind === 'orden' ? 'Orden de servicio No. ' + String(a.id).replace(/^OS-/, '') : kindTitle(a.kind) + ' ' + a.id; }
 
   function fmtBogota(iso) {
     try {
@@ -181,10 +213,30 @@
   }
 
   function emailSubject(a, s) {
-    return kindTitle(a.kind) + ' ' + a.id + ' · ' + (a.cliente || '') + ' · ' + ((s.empresa && s.empresa.marca) || 'Hot and Cold');
+    if (a.kind === 'cobro') return docLabel(a) + ' · ' + (a.cliente || '') + ' · ' + ((s.persona && s.persona.nombre) || 'Orlando Javier Molina Escobar');
+    return docLabel(a) + ' · ' + (a.cliente || '') + ' · ' + ((s.empresa && s.empresa.marca) || 'Hot and Cold');
   }
 
   function emailBody(a, s) {
+    var firma = ((s.empresa && s.empresa.nombre) || 'HOT ANDA COLD SYSTEM SAS') +
+      ' · NIT ' + ((s.empresa && s.empresa.nit) || '901.694.443-5') +
+      ' · Tel. ' + ((s.empresa && s.empresa.tel1) || '311 866 1394') + ' · ' + COMPANY_EMAIL;
+    if (a.kind === 'orden') {
+      var e = a.equipo || {};
+      return ['Cordial saludo,', '', 'Adjuntamos la orden de servicio No. ' + String(a.id).replace(/^OS-/, '') + ' firmada.', '',
+        'Orden No.: ' + String(a.id).replace(/^OS-/, ''), 'Cliente: ' + (a.cliente || ''), a.ticket ? 'Ticket / OC: ' + a.ticket : '',
+        'Dirección: ' + [a.direccion, a.ciudad].filter(Boolean).join(' · '), 'Fecha: ' + fmtBogota(a.createdAt),
+        'Equipo: ' + [e.tipo, e.marca, e.modelo].filter(Boolean).join(' · '), a.falla ? 'Falla reportada: ' + a.falla : '',
+        'Total: ' + money(a.total), 'Técnico: ' + ((a.firmaTecnico && a.firmaTecnico.nombre) || ''), '', firma
+      ].filter(function (l, i) { return l !== '' || i === 1 || i === 3 || i === 13; }).join('\n');
+    }
+    if (a.kind === 'cobro') {
+      var P = s.persona || {};
+      return ['Cordial saludo,', '', 'Adjunto la cuenta de cobro ' + a.id + '.', '',
+        'Cliente: ' + (a.cliente || ''), 'Concepto: ' + (a.concepto || ''), 'Valor: ' + money(a.total), 'Fecha: ' + fmtBogota(a.createdAt), '',
+        (P.nombre || 'Orlando Javier Molina Escobar') + ' · Tel. ' + (P.telefono || '311 866 1394') + (P.email ? ' · ' + P.email : '')
+      ].join('\n');
+    }
     var rec = (a.firmaCliente && a.firmaCliente.nombre) || '';
     var tec = (a.firmaTecnico && a.firmaTecnico.nombre) || '';
     var recLabel = a.kind === 'retiro' ? 'Entrega (cliente)' : 'Recibe (cliente)';
@@ -204,10 +256,7 @@
       'Equipos:',
       resumenTexto(a) || '(sin detalle)',
       '',
-      ((s.empresa && s.empresa.nombre) || 'HOT ANDA COLD SYSTEM SAS') +
-        ' · NIT ' + ((s.empresa && s.empresa.nit) || '901.694.443-5') +
-        ' · Tel. ' + ((s.empresa && s.empresa.tel1) || '311 866 1394') +
-        ' · ' + COMPANY_EMAIL
+      firma
     ];
     return lines.filter(function (l, i) { return l !== '' || i === 1 || i === 4 || i === 12 || i === 15; }).join('\n');
   }
@@ -341,6 +390,7 @@
     previewConsecutive: previewConsecutive, takeConsecutive: takeConsecutive,
     putActa: putActa, getActa: getActa, deleteActa: deleteActa, listActas: listActas,
     kvGet: kvGet, kvSet: kvSet, kvDel: kvDel,
-    processOutbox: processOutbox, pingServer: pingServer, resumenTexto: resumenTexto
+    processOutbox: processOutbox, pingServer: pingServer, resumenTexto: resumenTexto,
+    kindTitle: kindTitle, docLabel: docLabel, money: money, emailSubject: emailSubject, emailBody: emailBody
   };
 })(typeof self !== 'undefined' ? self : this);
