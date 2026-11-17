@@ -50,8 +50,10 @@
     ],
     /* Mis datos (cuenta de cobro): persona natural, se llenan una vez en Ajustes */
     persona: {
-      nombre: 'ORLANDO JAVIER MOLINA ESCOBAR', cedula: '', cedulaExpedida: '', telefono: '311 866 1394',
-      direccion: '', ciudad: 'Bogotá D.C.', email: '', banco: '', tipoCuenta: '', numeroCuenta: '', otroPago: ''
+      nombre: 'ORLANDO JAVIER MOLINA ESCOBAR', cedula: '79.878.080', cedulaExpedida: '', telefono: '311 866 1394',
+      direccion: '', ciudad: 'Bogotá D.C.', email: '',
+      banco: 'Bancolombia', tipoCuenta: 'Cuenta de ahorros', numeroCuenta: '91251198271',
+      nequi: '311 866 1394', daviplata: '311 866 1394', breb: '311 866 1394', otroPago: ''
     },
     apiUrl: '',
     apiToken: '',
@@ -117,6 +119,10 @@
       });
     }
     s.empresa.email = COMPANY_EMAIL;
+    /* Datos fijos del emisor y del pago: si nunca se llenaron (cadena vacía en un ajuste viejo), se aplican los predeterminados. Dirección y correo siguen opcionales. */
+    ['nombre', 'cedula', 'telefono', 'banco', 'tipoCuenta', 'numeroCuenta', 'nequi', 'daviplata', 'breb'].forEach(function (f) {
+      if (!String((s.persona && s.persona[f]) || '').trim()) s.persona[f] = DEFAULTS.persona[f];
+    });
     if (!s.correoClienteDefault) s.correoClienteDefault = DEFAULT_TO_EXTRA;
     if (s.whatsappDefault == null) s.whatsappDefault = '';
     if (!(parseInt(s.nextOS, 10) >= 1)) s.nextOS = DEFAULTS.nextOS;

@@ -1,7 +1,7 @@
 /* Hot and Cold · Actas — lógica de la interfaz */
 (function () {
   'use strict';
-  var APP_VERSION = '1.3.0';
+  var APP_VERSION = '1.3.1';
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
 
@@ -621,7 +621,7 @@
     } catch (e) { out.textContent = '❌ ' + (e.message || e); }
   }
 
-  /* ================= ORDEN DE SERVICIO y CUENTA DE COBRO (v1.3.0) ================= */
+  /* ================= ORDEN DE SERVICIO y CUENTA DE COBRO (v1.3.1) ================= */
   var DOCF = { orden: '#ordenForm', cobro: '#cobroForm' };
   var PADS_OF = { orden: ['osSigCli', 'osSigTec'], cobro: ['ccSigEmi', 'ccSigCli'] };
   var DOC_FIELDS = {
@@ -649,17 +649,21 @@
   }
   function personaMissing() {
     var P = S.persona || {}, miss = [];
+    if (!P.nombre) miss.push('nombre');
     if (!P.cedula) miss.push('cédula');
-    if (!P.direccion) miss.push('dirección');
-    if (!P.email) miss.push('correo');
-    if (!P.banco || !P.numeroCuenta) miss.push('cuenta donde le pagan');
+    if (!P.telefono) miss.push('teléfono');
     return miss;
   }
   function renderIssuer() {
     var P = S.persona || {}, miss = personaMissing();
+    var extra = [P.direccion, P.email].filter(Boolean).map(esc);
+    var pagoBanco = [P.banco, P.tipoCuenta, P.numeroCuenta && ('No. ' + P.numeroCuenta)].filter(Boolean).join(' · ');
+    var pagoBolsillos = [['Nequi', P.nequi], ['Daviplata', P.daviplata], ['Bre-B (llave)', P.breb], P.otroPago && ['Otro', P.otroPago]].filter(function (x) { return x && x[1]; }).map(function (x) { return x[0] + ': ' + x[1]; }).join(' · ');
     $('#ccIssuer').innerHTML = '<span class="muted">Emitida por (persona natural):</span><br><b>' + esc(P.nombre) + '</b><br>' +
-      'C.C. ' + esc(P.cedula || '____') + ' · Tel. ' + esc(P.telefono || '____') + '<br>' + esc(P.direccion || 'Dirección: ____') + (P.email ? ' · ' + esc(P.email) : '') +
-      (P.banco ? '<br>Pago: ' + esc([P.banco, P.tipoCuenta, P.numeroCuenta].filter(Boolean).join(' · ')) : '') +
+      'C.C. ' + esc(P.cedula || '____') + (P.cedulaExpedida ? ' de ' + esc(P.cedulaExpedida) : '') + ' · Tel. ' + esc(P.telefono || '____') +
+      (extra.length ? '<br>' + extra.join(' · ') : '') +
+      (pagoBanco ? '<br>Pago: ' + esc(pagoBanco) : '') +
+      (pagoBolsillos ? '<br>' + esc(pagoBolsillos) : '') +
       (miss.length ? '<span class="warn">&#9888;&#65039; Faltan sus datos: ' + esc(miss.join(', ')) + '. Llénelos una vez en Ajustes › Mis datos (saldrán en blanco mientras tanto).</span>' : '');
   }
 

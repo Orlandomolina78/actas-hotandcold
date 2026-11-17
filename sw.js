@@ -1,5 +1,5 @@
 /* Service worker: app disponible sin señal + reintento de envío (Background Sync) */
-var CACHE = 'hc-actas-v1.3.0';
+var CACHE = 'hc-actas-v1.3.1';
 var SHELL = [
   './', 'index.html', 'manifest.webmanifest', 'css/app.css',
   'js/app.js', 'js/pdf.js', 'js/outbox-core.js', 'js/numero-letras.js', 'js/docs-pdf.js',

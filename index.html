@@ -348,7 +348,7 @@
       </fieldset>
       <fieldset class="card">
         <legend>Mis datos (cuenta de cobro)</legend>
-        <p class="note">Se llenan una sola vez y salen impresos en todas las cuentas de cobro. Solo a nombre de la persona natural (sin logo ni NIT de la empresa).</p>
+        <p class="note">El nombre, la cédula, el celular y los datos para el pago ya vienen listos (se pueden corregir si hace falta). La dirección y el correo son opcionales: si no se llenan, no salen en el PDF. Para emitir una cuenta solo hay que llenar los datos del cliente, el concepto y el valor. Solo a nombre de la persona natural (sin logo ni NIT de la empresa).</p>
         <label>Nombre completo<input name="persona.nombre"></label>
         <div class="grid2">
           <label>Cédula<input name="persona.cedula" inputmode="numeric"></label>
@@ -367,7 +367,12 @@
           <label>Tipo de cuenta<input name="persona.tipoCuenta" placeholder="Ahorros"></label>
         </div>
         <label>Número de cuenta<input name="persona.numeroCuenta" inputmode="numeric"></label>
-        <label>Otro medio de pago <small>(opcional, ej. Nequi 311…)</small><input name="persona.otroPago"></label>
+        <div class="grid2">
+          <label>Nequi<input name="persona.nequi" type="tel"></label>
+          <label>Daviplata<input name="persona.daviplata" type="tel"></label>
+        </div>
+        <label>Bre-B (llave)<input name="persona.breb" type="tel"></label>
+        <label>Otro medio de pago <small>(opcional)</small><input name="persona.otroPago"></label>
       </fieldset>
       <fieldset class="card">
         <legend>Sedes (encabezado de la orden de servicio)</legend>

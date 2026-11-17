@@ -327,8 +327,14 @@
 
     k.text('DEBE A:', PW / 2, y, { size: 12.5, bold: true, color: NAVY, align: 'center' }); y += 6.8 * f;
     k.text(str(P.nombre).toUpperCase(), PW / 2, y, { size: 15.5, bold: true, align: 'center' }); y += 6.4 * f;
-    k.text('C.C. ' + blank(P.cedula, 16) + '  de  ' + blank(P.cedulaExpedida, 12), PW / 2, y, { size: 11.5, align: 'center' }); y += 5.4 * f;
-    k.fit('Dirección: ' + blank(P.direccion, 22) + (str(P.ciudad) ? ', ' + str(P.ciudad) : '') + '  ·  Tel. ' + blank(P.telefono, 12) + '  ·  Correo: ' + blank(P.email, 22), PW / 2, y, CW, { size: 9.6, color: GRAY, align: 'center' });
+    var ccLine = 'C.C. ' + (str(P.cedula) || blank('', 16));
+    if (str(P.cedulaExpedida)) ccLine += '  de  ' + str(P.cedulaExpedida);
+    k.text(ccLine, PW / 2, y, { size: 11.5, align: 'center' }); y += 5.4 * f;
+    var emisorBits = [];
+    if (str(P.direccion)) emisorBits.push('Dirección: ' + str(P.direccion) + (str(P.ciudad) ? ', ' + str(P.ciudad) : ''));
+    emisorBits.push('Tel. ' + (str(P.telefono) || blank('', 12)));
+    if (str(P.email)) emisorBits.push('Correo: ' + str(P.email));
+    k.fit(emisorBits.join('  ·  '), PW / 2, y, CW, { size: 9.6, color: GRAY, align: 'center' });
     y += 5.6 * f;
 
     var val = totalCC(c);
@@ -365,10 +371,15 @@
     y += 4.5 * f;
 
     k.text('DATOS PARA EL PAGO', M, y, { size: 10.5, bold: true, color: NAVY }); y += 2.2;
-    var pr = [['Titular', str(P.nombre).toUpperCase() + '  ·  C.C. ' + blank(P.cedula, 14)],
-      ['Banco / cuenta', blank(P.banco, 14) + '   Tipo: ' + blank(P.tipoCuenta, 10) + '   No. ' + blank(P.numeroCuenta, 18)]];
+    var pr = [['Titular', str(P.nombre).toUpperCase() + '  ·  C.C. ' + blank(P.cedula, 14)]];
+    var bankVal = [str(P.tipoCuenta), str(P.numeroCuenta) && ('No. ' + str(P.numeroCuenta))].filter(Boolean).join(' ');
+    if (str(P.banco) || bankVal) pr.push([str(P.banco) || 'Banco', bankVal || blank('', 18)]);
+    else pr.push(['Banco / cuenta', 'Tipo: ' + blank('', 10) + '   No. ' + blank('', 18)]);
+    if (str(P.nequi)) pr.push(['Nequi', str(P.nequi)]);
+    if (str(P.daviplata)) pr.push(['Daviplata', str(P.daviplata)]);
+    if (str(P.breb)) pr.push(['Bre-B (llave)', str(P.breb)]);
     if (str(P.otroPago)) pr.push(['Otro medio', str(P.otroPago)]);
-    var rh = 6.8 * f + 0.4;
+    var rh = 6.4 * f + 0.35;
     pr.forEach(function (r) { k.rect(M, y, 32, rh, SOFT); k.rect(M + 32, y, CW - 32, rh, WHITE); k.text(r[0], M + 2, y + rh / 2 + 1.3 * f, { size: 9.4, bold: true, color: NAVY }); k.fit(r[1], M + 34, y + rh / 2 + 1.3 * f, CW - 36, { size: 10 }); y += rh; });
     y += 5 * f;
 
